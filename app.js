@@ -125,47 +125,84 @@ function nav(page){state.page=page;save();render()}
 function selected(a,v){return a.includes(v)?'selected':''}
 function press(el,text='✓') {const old=el.textContent;el.disabled=true;el.textContent=text;setTimeout(()=>{el.disabled=false;el.textContent=old},600)}
 function themePage(){view.innerHTML=`<section class="theme-screen"><div class="theme-card"><div class="theme-logo">🥗</div><div class="eyebrow">WILLKOMMEN BEI KOLDIS</div><h1>Wie möchtest du KOLDIS sehen?</h1><p>Wähle einmal deinen Stil. Du kannst ihn später jederzeit im Profil ändern.</p><div class="theme-options"><button class="theme-choice light-choice" data-theme="light"><span>☀️</span><strong>Hell</strong><small>Hell, klar und freundlich</small></button><button class="theme-choice dark-choice" data-theme="dark"><span>🌙</span><strong>Dunkel</strong><small>Dunkel, ruhig und modern</small></button></div></div></section>`;view.querySelectorAll('[data-theme]').forEach(b=>b.onclick=()=>{state.theme=b.dataset.theme;state.themeChosen=true;state.page='home';save();applyTheme();render()})}
+function buildWeek(){
+  const candidates=filteredRecipes().slice().sort((a,b)=>{
+    const as=(a.tags||[]).filter(t=>state.goals.includes(t)).length;
+    const bs=(b.tags||[]).filter(t=>state.goals.includes(t)).length;
+    return bs-as || a.price-b.price;
+  });
+  const chosen=[]; let total=0;
+  for(const r of candidates){
+    if(chosen.some(x=>x.id===r.id)) continue;
+    if(chosen.length>=7) break;
+    if(total+r.price <= state.budget || chosen.length<3){ chosen.push(r); total+=r.price; }
+  }
+  if(chosen.length<7){
+    for(const r of recipes){
+      if(chosen.length>=7) break;
+      if(!chosen.some(x=>x.id===r.id)) chosen.push(r);
+    }
+  }
+  state.plan={}; chosen.slice(0,7).forEach((r,i)=>state.plan[DAYS[i]]=r.id);
+  save(); nav('plan');
+}
 function welcome(){
   const recommended=filteredRecipes().slice(0,3);
   const planned=Object.keys(state.plan||{}).length;
-  const spent=state.cart.reduce((a,x)=>a+x.price,0);
+  const spent=Object.entries(state.plan||{}).reduce((sum,[,id])=>sum+(recipes.find(r=>r.id===id)?.price||0),0);
   view.innerHTML=`<section class="mobile-home">
     <div class="welcome-hero">
       <div class="eyebrow">DEIN KOLDIS</div>
-      <h1>Was darf diese Woche auf den Tisch?</h1>
-      <p>KOLDIS kennt deine Vorlieben und dein Budget. Du entscheidest, was daraus wird.</p>
+      <h1>Deine Woche. Einfach geplant.</h1>
+      <p>KOLDIS sucht Gerichte, die zu deinem Geschmack, deinen Zielen und deinem Budget passen.</p>
       <div class="hero-buttons">
-        <button class="btn hero-main" id="discover">🍽️ Gerichte entdecken</button>
-        <button class="btn secondary hero-secondary" id="openPlan">📅 Wochenplan ansehen</button>
+        <button class="btn hero-main" id="planWeek">✨ Meine Woche planen</button>
+        <button class="btn secondary hero-secondary" id="discover">🍽️ Gerichte entdecken</button>
       </div>
     </div>
     <div class="quick-grid">
-      <button class="quick-tile" data-q="recipes"><span>🔎</span><strong>Rezepte</strong><small>Passend für dich</small></button>
+      <button class="quick-tile" data-q="recipes"><span>🍽️</span><strong>Gerichte</strong><small>Passend für dich</small></button>
       <button class="quick-tile" data-q="plan"><span>📅</span><strong>Wochenplan</strong><small>${planned}/7 Tage geplant</small></button>
-      <button class="quick-tile" data-q="shopping"><span>🛒</span><strong>Einkauf</strong><small>${spent.toFixed(2)} € eingeplant</small></button>
+      <button class="quick-tile" data-q="shopping"><span>🛒</span><strong>Einkauf</strong><small>${spent.toFixed(2)} € aus deiner Woche</small></button>
     </div>
     <section class="section-block">
       <div class="section-heading"><div><div class="eyebrow">FÜR DICH</div><h2>Das könnte dir gefallen</h2></div><button class="text-link" id="allRecipes">Alle anzeigen</button></div>
-      <div class="mini-recommendations">${recommended.map(x=>`<button class="mini-recipe" data-rec="${x.id}"><span class="mini-recipe-dot"></span><div><strong>${x.name}</strong><small>${x.p} g Protein · ${x.price.toFixed(2)} €</small></div><b>›</b></button>`).join('')||'<div class="notice">Noch keine passenden Gerichte gefunden.</div>'}</div>
+      <div class="mini-recommendations">${recommended.map(x=>`<button class="mini-recipe" data-rec="${x.id}"><span class="mini-recipe-dot"></span><div><strong>${x.name}</strong><small>${x.p} g Protein · ${x.price.toFixed(2)} € · ${x.method}</small></div><b>›</b></button>`).join('')||'<div class="notice">Noch keine passenden Gerichte gefunden.</div>'}</div>
     </section>
     <section class="budget-card">
       <div><span class="eyebrow">DEIN BUDGET</span><strong>${state.budget} € <small>/ Woche</small></strong><span>Noch ca. ${Math.max(0,state.budget-spent).toFixed(2)} € frei</span></div>
       <div class="budget-ring"><span>${Math.min(100,Math.round(spent/state.budget*100))}%</span></div>
     </section>
   </section>`;
+  view.querySelector('#planWeek').onclick=buildWeek;
   view.querySelector('#discover').onclick=()=>nav('recipes');
-  view.querySelector('#openPlan').onclick=()=>nav('plan');
   view.querySelector('#allRecipes').onclick=()=>nav('recipes');
   view.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>nav(b.dataset.q));
   view.querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>openRecipe(Number(b.dataset.rec)));
 }
+function recipePreparation(x){
+  if(x.zubereitung) return x.zubereitung;
+  const ings=x.ingredients||[];
+  const protein=ings.find(i=>/hähn|huhn|hack|rind|pute|lachs|thunfisch|garnel|ei/i.test(i)) || ings[0] || 'die Hauptzutaten';
+  const veg=ings.filter(i=>/paprika|brokkoli|karotte|zucchini|spinat|salat|tomat|gurke|zwiebel|mais|bohnen|erbsen|champignon/i.test(i)).slice(0,3);
+  const base=ings.find(i=>/reis|nudel|pasta|kartoff|wrap|tortilla|brot|süßkartoff/i.test(i));
+  const v=veg.length?` ${veg.join(', ')} vorbereiten.`:'';
+  if(x.method==='Ofen') return [`Backofen auf 200 °C Ober-/Unterhitze vorheizen.`,`${protein} mit etwas Öl und den Gewürzen vermengen und auf ein Blech geben.${v}`,base?`${base} vorbereiten und zusammen mit den übrigen Zutaten auf dem Blech verteilen.`:'Alles gleichmäßig verteilen und würzen.',`Alles ca. 20–30 Minuten backen, bis die Hauptzutat durchgegart und das Gemüse bissfest ist. Anschließend kurz ruhen lassen und servieren.`];
+  if(x.method==='Topf') return [`Die Zutaten vorbereiten und ${base?base+' nach Packungsangabe garen.':'einen Topf auf mittlere Hitze bringen.'}`,`${protein} in etwas Öl anbraten und mit Salz, Pfeffer und passenden Gewürzen abschmecken.${v}`,`Die übrigen Zutaten dazugeben und alles bei mittlerer Hitze ${base?'kurz vermengen und durchziehen lassen.':'8–12 Minuten köcheln lassen.'}`,`Abschmecken und heiß servieren. Für Meal Prep vollständig abkühlen lassen und portionsweise verpacken.`];
+  if(x.method==='Mikrowelle') return [`Die Zutaten vorbereiten und in eine mikrowellengeeignete Schüssel geben.`,`${protein} und Gemüse gleichmäßig verteilen und würzen.${base?' '+base+' dazugeben.':''}`,`Abgedeckt in 2–3 Minuten-Schritten erhitzen und zwischendurch umrühren, bis alles gleichmäßig heiß ist und die Hauptzutat vollständig durchgegart ist.`,`Kurz ruhen lassen, abschmecken und servieren.`];
+  if(x.method==='Airfryer') return [`Airfryer auf 190 °C vorheizen.`,`${protein} und die vorbereiteten Zutaten mit wenig Öl und Gewürzen vermengen.${v}`,`Alles locker in den Korb geben und je nach Stückgröße etwa 10–18 Minuten garen. Nach der Hälfte der Zeit wenden oder schütteln.`,`Prüfen, ob die Hauptzutat vollständig durchgegart ist, anschließend servieren.`];
+  if(x.method==='Egal') return [`Alle Zutaten vorbereiten und die Hauptzutaten würzen.`,`Die ${protein} in einer beschichteten Pfanne oder im Ofen garen.${v}`,`Die übrigen Zutaten dazugeben bzw. separat fertigstellen und anschließend miteinander kombinieren.`,`Abschmecken und direkt servieren.`];
+  return [`Alle Zutaten vorbereiten und ${base?base+' nach Packungsangabe garen.':'die Beilage vorbereiten.'}`,`${protein} in einer heißen Pfanne mit etwas Öl rundum anbraten.${v}`,`Die übrigen Zutaten dazugeben und alles bei mittlerer Hitze fertig garen.`,`Abschmecken und direkt servieren. Für Meal Prep portionsweise abfüllen.`];
+}
+recipes.forEach(r=>{if(!r.zubereitung)r.zubereitung=recipePreparation(r)});
 function openRecipe(id){
   const x=recipes.find(r=>r.id===id); if(!x) return;
   const day=nextPlanDay();
-  view.innerHTML=`<section class="recipe-detail panel"><button class="back-link" id="backRecipes">← Zurück zu Rezepten</button><div class="recipe-category">${x.tags[0]||'REZEPT'}</div><div class="eyebrow">REZEPT</div><h1 class="title">${x.name}</h1><div class="detail-tags">${x.tags.map(t=>`<span>${t}</span>`).join('')}</div><div class="detail-stats"><div><b>${x.kcal}</b><small>kcal</small></div><div><b>${x.p} g</b><small>Protein</small></div><div><b>${x.price.toFixed(2)} €</b><small>pro Portion</small></div><div><b>${x.method}</b><small>Zubereitung</small></div></div><div class="detail-section"><h2>Zutaten</h2><ul>${x.ingredients.map(i=>`<li>${i}</li>`).join('')}</ul></div><div class="detail-section"><h2>Deine Woche</h2><p>${day?`KOLDIS kann dieses Gericht für <strong>${day}</strong> einplanen.`:'Dein Wochenplan ist bereits gefüllt.'}</p></div><div class="detail-actions"><button class="btn" id="addPlan">📅 ${day?'Für '+day+' planen':'Wochenplan ist voll'}</button><button class="btn secondary" id="addCart">🛒 Einkauf hinzufügen</button></div></section>`;
+  const prep=x.zubereitung||recipePreparation(x);
+  view.innerHTML=`<section class="recipe-detail panel"><button class="back-link" id="backRecipes">← Zurück zu Rezepten</button><div class="recipe-category">${x.tags[0]||'REZEPT'}</div><div class="eyebrow">REZEPT</div><h1 class="title">${x.name}</h1><div class="detail-tags">${x.tags.map(t=>`<span>${t}</span>`).join('')}</div><div class="detail-stats"><div><b>${x.kcal}</b><small>kcal</small></div><div><b>${x.p} g</b><small>Protein</small></div><div><b>${x.price.toFixed(2)} €</b><small>pro Portion</small></div><div><b>${x.method}</b><small>Zubereitung</small></div></div><div class="detail-section"><h2>Zutaten</h2><ul>${x.ingredients.map(i=>`<li>${i}</li>`).join('')}</ul></div><div class="detail-section"><h2>Zubereitung</h2><div class="koldis-prep-steps">${prep.map((step,i)=>`<div class="koldis-prep-step"><span>${i+1}</span><p>${step}</p></div>`).join('')}</div></div><div class="detail-section"><h2>Deine Woche</h2><p>${day?`KOLDIS kann dieses Gericht für <strong>${day}</strong> einplanen.`:'Dein Wochenplan ist bereits gefüllt.'}</p></div><div class="detail-actions"><button class="btn" id="addPlan">📅 ${day?'Für '+day+' planen':'Wochenplan ist voll'}</button><button class="btn secondary" id="addCart">🛒 Einkauf hinzufügen</button></div></section>`;
   view.querySelector('#backRecipes').onclick=()=>nav('recipes');
   const addPlan=view.querySelector('#addPlan'); if(day)addPlan.onclick=()=>{state.plan[day]=x.id;save();press(addPlan,'✓ Eingeplant');}; else addPlan.disabled=true;
-  view.querySelector('#addCart').onclick=()=>{state.cart.push(x);save();press(view.querySelector('#addCart'),'✓ Hinzugefügt');};
+  view.querySelector('#addCart').onclick=()=>{if(!state.cart.some(r=>r.id===x.id))state.cart.push(x);save();press(view.querySelector('#addCart'),'✓ Hinzugefügt');};
 }
 function nextPlanDay(){for(const d of DAYS)if(!state.plan?.[d])return d;return null}
 function onboarding(){const titles=['Wo kommst du her?','Was magst du – und was magst du nicht?','Gibt es etwas, das du nicht verträgst?','Was ist dein Ziel?','Wie möchtest du kochen?','Wie viel möchtest du ausgeben?'];const step=state.step;let body='';if(step===1){const opts=['Niedersachsen','Nordrhein-Westfalen','Schleswig-Holstein','Hamburg','Bremen','Hessen'];body=`<div class="choices">${opts.map(x=>`<button class="choice ${selected([state.region],x)}" data-value="${x}">${x}</button>`).join('')}</div>`}else if(step===2){body=`<div class="ingredient-box"><input id="ingredientSearch" class="search" placeholder="🔎 Zutat suchen, z.B. Hähnchen..."><div id="ingredientResults" class="ingredient-results"></div></div><div class="selected-section"><div><strong>❤️ Mag ich</strong><div id="likes" class="chips"></div></div><div><strong>❌ Mag ich nicht</strong><div id="dislikes" class="chips"></div></div></div><div class="hint">Klicke eine Zutat an, um sie zu deinen Vorlieben hinzuzufügen. Danach kannst du zwischen ❤️ und ❌ wechseln.</div>`}else if(step===3){const opts=['Laktose','Gluten','Nüsse','Fruktose','Keine Angabe'];body=`<div class="choices">${opts.map(x=>`<button class="choice ${selected(state.intolerances,x)}" data-value="${x}">${x}</button>`).join('')}</div><div class="notice">⚠️ Bei Allergien immer die Angaben auf der tatsächlichen Produktverpackung prüfen.</div>`}else if(step===4){const opts=['💪 High Protein','🔥 Low Calorie','💰 Günstig','⚖️ Gewicht halten','🥗 Gesünder essen','🍱 Meal Prep','⏱️ Schnell kochen'];body=`<div class="sub">Mehrere Ziele sind möglich.</div><div class="choices">${opts.map(x=>`<button class="choice ${selected(state.goals,x)}" data-value="${x}">${x}</button>`).join('')}</div>`}else if(step===5){const opts=[['Egal','Keine Einschränkung'],['Pfanne','Schnell & unkompliziert'],['Ofen','Ideal für Blechgerichte'],['Mikrowelle','Schnell aufgewärmt'],['Airfryer','Knusprig & schnell'],['Topf','Für Pasta, Reis & Bowls']];body=`<div class="choices">${opts.map(([x,d])=>`<button class="choice ${selected([state.method],x)}" data-value="${x}"><strong>${x}</strong><small>${d}</small></button>`).join('')}</div>`}else{body=`<div class="budget"><span id="budgetValue">${state.budget}</span> €</div><input id="budgetRange" class="range" type="range" min="25" max="150" step="5" value="${state.budget}"><div class="hint">Geschätztes Wochenbudget. Später können echte Marktpreise automatisch einfließen.</div>`}view.innerHTML=`<section class="panel"><div class="progress">${Array.from({length:6},(_,i)=>`<div class="bar ${i+1<=step?'on':''}"></div>`).join('')}</div><div class="eyebrow">EINRICHTUNG · SCHRITT ${step} VON 6</div><h1 class="title">${titles[step-1]}</h1><div class="sub">${step===1?'Damit KOLDIS später passende Angebote und Preise einordnen kann.':step===2?'Suche nach Zutaten und wähle beliebig viele Vorlieben aus.':step===3?'Diese Angaben werden bei Rezeptvorschlägen berücksichtigt.':step===4?'Mehrere Ziele sind möglich.':step===5?'Wähle, wie deine Gerichte am liebsten zubereitet werden sollen. KOLDIS nutzt diese Angabe für passendere Rezeptvorschläge.':'Dein Budget hilft KOLDIS bei der Auswahl günstiger Gerichte.'}</div>${body}<div class="actions">${step>1?'<button class="btn secondary" id="back">← Zurück</button>':'<span></span>'}<button class="btn" id="next">${step===6?'🍽️ Gerichte finden':'Weiter →'}</button></div></section>`;
@@ -201,4 +238,22 @@ document.querySelectorAll('[data-nav]').forEach(b=>b.addEventListener('click',()
   document.addEventListener("DOMContentLoaded",()=>{
     document.body.classList.add("koldis-v06");
   });
+})();
+
+
+/* KOLDIS 0.6.1 — preparation display */
+(function(){
+  function getPrep(recipe){
+    return recipe.zubereitung || recipe.zubereitungText || recipe.instructions ||
+      recipe.steps || recipe.anleitung || recipe.preparation ||
+      "Zutaten vorbereiten, in der angegebenen Reihenfolge garen und anschließend abschmecken.";
+  }
+  window.KOLDIS_getPreparation = getPrep;
+  window.KOLDIS_renderPreparation = function(recipe){
+    const prep = getPrep(recipe);
+    if (Array.isArray(prep)) {
+      return `<div class="koldis-prep-steps">${prep.map((s,i)=>`<div class="koldis-prep-step"><span>${i+1}</span><p>${s}</p></div>`).join("")}</div>`;
+    }
+    return `<div class="koldis-prep-text">${prep}</div>`;
+  };
 })();

@@ -85,3 +85,9 @@ body{background:var(--k-bg);color:var(--k-text);font-family:Inter,system-ui,-app
   .koldis-hero,.koldis-section{max-width:860px;margin:auto}
   .koldis-action-grid{grid-template-columns:repeat(3,1fr)}
 }
+
+.koldis-prep-steps{display:grid;gap:10px;margin-top:10px}
+.koldis-prep-step{display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start;background:var(--k-surface,#151a18);border:1px solid var(--k-border,rgba(255,255,255,.08));border-radius:16px;padding:12px}
+.koldis-prep-step>span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--k-accent,#b9ff35);color:#0b0e0c;font-weight:800;font-size:12px}
+.koldis-prep-step p{margin:3px 0 0;color:var(--k-text,#f5f7f5);font-size:14px;line-height:1.45}
+.koldis-prep-text{background:var(--k-surface,#151a18);border:1px solid var(--k-border,rgba(255,255,255,.08));border-radius:18px;padding:15px;color:var(--k-text,#f5f7f5);font-size:14px;line-height:1.5}
