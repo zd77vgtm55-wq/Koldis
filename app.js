@@ -11,7 +11,19 @@ const state=load();
 function syncPlan(){if(!Array.isArray(state.plans)||!state.plans.length)state.plans=[{id:'w1',label:'Woche 1',plan:{}}];if(state.currentPlan<0)state.currentPlan=0;if(state.currentPlan>=state.plans.length)state.currentPlan=state.plans.length-1;state.plan=state.plans[state.currentPlan].plan||{};state.plans[state.currentPlan].plan=state.plan}
 function setCurrentPlan(i){syncPlan();state.currentPlan=Math.max(0,Math.min(i,state.plans.length-1));state.plan=state.plans[state.currentPlan].plan||{};state.plans[state.currentPlan].plan=state.plan;save()}
 function addWeek(){syncPlan();const n=state.plans.length+1;state.plans.push({id:'w'+Date.now(),label:'Woche '+n,plan:{}});state.currentPlan=state.plans.length-1;state.plan=state.plans[state.currentPlan].plan;save()}
-function clearCurrentWeek(){syncPlan();state.plans[state.currentPlan].plan={};state.plan=state.plans[state.currentPlan].plan;save()}
+function clearCurrentWeek(){
+  syncPlan();
+  if(state.plans.length<=1){
+    state.plans[0].plan={};
+    state.currentPlan=0;
+  }else{
+    state.plans.splice(state.currentPlan,1);
+    state.currentPlan=Math.max(0,state.currentPlan-1);
+  }
+  state.plan=state.plans[state.currentPlan].plan||{};
+  state.plans[state.currentPlan].plan=state.plan;
+  save();
+}
 function clearAllWeeks(){state.plans=[{id:'w1',label:'Woche 1',plan:{}}];state.currentPlan=0;state.plan=state.plans[0].plan;save()}
 
 const app=document.getElementById('app');
@@ -92,7 +104,7 @@ function planPage(){
   </section>`);
   app.querySelector('#newWeek').onclick=()=>{addWeek();planPage()};
   app.querySelector('#auto').onclick=autoPlan;
-  app.querySelector('#clearWeek').onclick=()=>{if(confirm(`${state.plans[current].label} wirklich komplett löschen?`)){clearCurrentWeek();planPage()}};
+  app.querySelector('#clearWeek').onclick=()=>{if(confirm(`${state.plans[current].label} wirklich löschen? Die komplette Woche mit allen geplanten Mahlzeiten wird entfernt.`)){clearCurrentWeek();planPage()}};
   app.querySelector('#clearAll').onclick=()=>{if(confirm('Wirklich alle geplanten Wochen löschen?')){clearAllWeeks();planPage()}};
   app.querySelectorAll('[data-week]').forEach(b=>b.onclick=()=>{setCurrentPlan(+b.dataset.week);planPage()});
   app.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{delete state.plan[b.dataset.remove];state.plans[current].plan=state.plan;save();planPage()});
