@@ -6,9 +6,56 @@ const FILTERS=['Alle','High Protein','Günstig','Schnell','Meal Prep','Low Calor
 const STORES=['ALDI','LIDL','COMBI','EDEKA','REWE','PENNY','Netto'];
 const KEY='koldis-stable-v1';
 const defaults={page:'home',budget:60,store:'',goals:['High Protein'],likes:[],dislikes:[],intolerances:[],method:'Egal',plan:{},plans:[{id:'w1',label:'Woche 1',plan:{}}],currentPlan:0,cart:[],saved:[],filter:'Alle',query:'',theme:'dark',portionDefault:4,onboardingDone:false};
-function load(){try{const x=JSON.parse(localStorage.getItem(KEY)||'null');const st={...defaults,...(x&&typeof x==='object'?x:{})};if(!Array.isArray(st.plans)||!st.plans.length){st.plans=[{id:'w1',label:'Woche 1',plan:st.plan&&typeof st.plan==='object'?st.plan:{}}]} if(typeof st.currentPlan!=='number')st.currentPlan=0; if(st.currentPlan>=st.plans.length)st.currentPlan=st.plans.length-1; st.plan=st.plans[st.currentPlan]?.plan||{};return st}catch{return {...defaults}}}
+function load(){
+  try{
+    const x=JSON.parse(localStorage.getItem(KEY)||'null');
+    const st={...defaults,...(x&&typeof x==='object'?x:{})};
+
+    if(!Array.isArray(st.goals)) st.goals=[...defaults.goals];
+    if(!Array.isArray(st.likes)) st.likes=[];
+    if(!Array.isArray(st.dislikes)) st.dislikes=[];
+    if(!Array.isArray(st.intolerances)) st.intolerances=[];
+    if(!Array.isArray(st.cart)) st.cart=[];
+    if(!Array.isArray(st.saved)) st.saved=[];
+    if(!st.filter) st.filter='Alle';
+    if(typeof st.query!=='string') st.query='';
+    if(typeof st.budget!=='number' || !Number.isFinite(st.budget)) st.budget=60;
+    if(typeof st.portionDefault!=='number' || !Number.isFinite(st.portionDefault) || st.portionDefault<1) st.portionDefault=4;
+    if(typeof st.method!=='string') st.method='Egal';
+    if(typeof st.store!=='string') st.store='';
+    if(typeof st.onboardingDone!=='boolean') st.onboardingDone=false;
+    if(!st.plan || typeof st.plan!=='object' || Array.isArray(st.plan)) st.plan={};
+
+    if(!Array.isArray(st.plans) || !st.plans.length){
+      st.plans=[{id:'w1',label:'Woche 1',plan:st.plan}];
+    }
+
+    st.plans=st.plans.map((w,i)=>({
+      id: w && w.id ? String(w.id) : 'w'+(i+1),
+      label: w && w.label ? String(w.label) : 'Woche '+(i+1),
+      plan: w && w.plan && typeof w.plan==='object' && !Array.isArray(w.plan) ? w.plan : {}
+    }));
+
+    if(!Number.isInteger(st.currentPlan) || st.currentPlan<0) st.currentPlan=0;
+    if(st.currentPlan>=st.plans.length) st.currentPlan=st.plans.length-1;
+    st.plan=st.plans[st.currentPlan].plan || {};
+    st.plans[st.currentPlan].plan=st.plan;
+    return st;
+  }catch(err){
+    console.warn('KOLDIS state reset:',err);
+    return {...defaults,plans:[{id:'w1',label:'Woche 1',plan:{}}],plan:{},currentPlan:0};
+  }
+}
 const state=load();
-function syncPlan(){if(!Array.isArray(state.plans)||!state.plans.length)state.plans=[{id:'w1',label:'Woche 1',plan:{}}];if(state.currentPlan<0)state.currentPlan=0;if(state.currentPlan>=state.plans.length)state.currentPlan=state.plans.length-1;state.plan=state.plans[state.currentPlan].plan||{};state.plans[state.currentPlan].plan=state.plan}
+function syncPlan(){
+  if(!Array.isArray(state.plans)||!state.plans.length)
+    state.plans=[{id:'w1',label:'Woche 1',plan:{}}];
+  if(!Number.isInteger(state.currentPlan)||state.currentPlan<0) state.currentPlan=0;
+  if(state.currentPlan>=state.plans.length) state.currentPlan=state.plans.length-1;
+  const w=state.plans[state.currentPlan];
+  if(!w.plan || typeof w.plan!=='object' || Array.isArray(w.plan)) w.plan={};
+  state.plan=w.plan;
+}
 function setCurrentPlan(i){syncPlan();state.currentPlan=Math.max(0,Math.min(i,state.plans.length-1));state.plan=state.plans[state.currentPlan].plan||{};state.plans[state.currentPlan].plan=state.plan;save()}
 function addWeek(){syncPlan();const n=state.plans.length+1;state.plans.push({id:'w'+Date.now(),label:'Woche '+n,plan:{}});state.currentPlan=state.plans.length-1;state.plan=state.plans[state.currentPlan].plan;save()}
 function clearCurrentWeek(){
