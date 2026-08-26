@@ -126,7 +126,7 @@ function selected(a,v){return a.includes(v)?'selected':''}
 function press(el,text='✓') {const old=el.textContent;el.disabled=true;el.textContent=text;setTimeout(()=>{el.disabled=false;el.textContent=old},600)}
 function themePage(){view.innerHTML=`<section class="theme-screen"><div class="theme-card"><div class="theme-logo">🥗</div><div class="eyebrow">WILLKOMMEN BEI KOLDIS</div><h1>Wie möchtest du KOLDIS sehen?</h1><p>Wähle einmal deinen Stil. Du kannst ihn später jederzeit im Profil ändern.</p><div class="theme-options"><button class="theme-choice light-choice" data-theme="light"><span>☀️</span><strong>Hell</strong><small>Hell, klar und freundlich</small></button><button class="theme-choice dark-choice" data-theme="dark"><span>🌙</span><strong>Dunkel</strong><small>Dunkel, ruhig und modern</small></button></div></div></section>`;view.querySelectorAll('[data-theme]').forEach(b=>b.onclick=()=>{state.theme=b.dataset.theme;state.themeChosen=true;state.page='home';save();applyTheme();render()})}
 function buildWeek(){
-  const candidates=filteredRecipes().slice().sort((a,b)=>{
+  const candidates=browseRecipes().slice().sort((a,b)=>{
     const as=(a.tags||[]).filter(t=>state.goals.includes(t)).length;
     const bs=(b.tags||[]).filter(t=>state.goals.includes(t)).length;
     return bs-as || a.price-b.price;
@@ -135,15 +135,14 @@ function buildWeek(){
   for(const r of candidates){
     if(chosen.some(x=>x.id===r.id)) continue;
     if(chosen.length>=7) break;
-    if(total+r.price <= state.budget || chosen.length<3){ chosen.push(r); total+=r.price; }
+    if(total+r.price<=state.budget || chosen.length<3){chosen.push(r);total+=r.price;}
   }
-  if(chosen.length<7){
-    for(const r of recipes){
-      if(chosen.length>=7) break;
-      if(!chosen.some(x=>x.id===r.id)) chosen.push(r);
-    }
+  for(const r of candidates){
+    if(chosen.length>=7) break;
+    if(!chosen.some(x=>x.id===r.id)) chosen.push(r);
   }
-  state.plan={}; chosen.slice(0,7).forEach((r,i)=>state.plan[DAYS[i]]=r.id);
+  state.plan={};
+  chosen.slice(0,7).forEach((r,i)=>state.plan[DAYS[i]]=r.id);
   save(); nav('plan');
 }
 function welcome(){
@@ -208,13 +207,92 @@ function nextPlanDay(){for(const d of DAYS)if(!state.plan?.[d])return d;return n
 function onboarding(){const titles=['Wo kommst du her?','Was magst du – und was magst du nicht?','Gibt es etwas, das du nicht verträgst?','Was ist dein Ziel?','Wie möchtest du kochen?','Wie viel möchtest du ausgeben?'];const step=state.step;let body='';if(step===1){const opts=['Niedersachsen','Nordrhein-Westfalen','Schleswig-Holstein','Hamburg','Bremen','Hessen'];body=`<div class="choices">${opts.map(x=>`<button class="choice ${selected([state.region],x)}" data-value="${x}">${x}</button>`).join('')}</div>`}else if(step===2){body=`<div class="ingredient-box"><input id="ingredientSearch" class="search" placeholder="🔎 Zutat suchen, z.B. Hähnchen..."><div id="ingredientResults" class="ingredient-results"></div></div><div class="selected-section"><div><strong>❤️ Mag ich</strong><div id="likes" class="chips"></div></div><div><strong>❌ Mag ich nicht</strong><div id="dislikes" class="chips"></div></div></div><div class="hint">Klicke eine Zutat an, um sie zu deinen Vorlieben hinzuzufügen. Danach kannst du zwischen ❤️ und ❌ wechseln.</div>`}else if(step===3){const opts=['Laktose','Gluten','Nüsse','Fruktose','Keine Angabe'];body=`<div class="choices">${opts.map(x=>`<button class="choice ${selected(state.intolerances,x)}" data-value="${x}">${x}</button>`).join('')}</div><div class="notice">⚠️ Bei Allergien immer die Angaben auf der tatsächlichen Produktverpackung prüfen.</div>`}else if(step===4){const opts=['💪 High Protein','🔥 Low Calorie','💰 Günstig','⚖️ Gewicht halten','🥗 Gesünder essen','🍱 Meal Prep','⏱️ Schnell kochen'];body=`<div class="sub">Mehrere Ziele sind möglich.</div><div class="choices">${opts.map(x=>`<button class="choice ${selected(state.goals,x)}" data-value="${x}">${x}</button>`).join('')}</div>`}else if(step===5){const opts=[['Egal','Keine Einschränkung'],['Pfanne','Schnell & unkompliziert'],['Ofen','Ideal für Blechgerichte'],['Mikrowelle','Schnell aufgewärmt'],['Airfryer','Knusprig & schnell'],['Topf','Für Pasta, Reis & Bowls']];body=`<div class="choices">${opts.map(([x,d])=>`<button class="choice ${selected([state.method],x)}" data-value="${x}"><strong>${x}</strong><small>${d}</small></button>`).join('')}</div>`}else{body=`<div class="budget"><span id="budgetValue">${state.budget}</span> €</div><input id="budgetRange" class="range" type="range" min="25" max="150" step="5" value="${state.budget}"><div class="hint">Geschätztes Wochenbudget. Später können echte Marktpreise automatisch einfließen.</div>`}view.innerHTML=`<section class="panel"><div class="progress">${Array.from({length:6},(_,i)=>`<div class="bar ${i+1<=step?'on':''}"></div>`).join('')}</div><div class="eyebrow">EINRICHTUNG · SCHRITT ${step} VON 6</div><h1 class="title">${titles[step-1]}</h1><div class="sub">${step===1?'Damit KOLDIS später passende Angebote und Preise einordnen kann.':step===2?'Suche nach Zutaten und wähle beliebig viele Vorlieben aus.':step===3?'Diese Angaben werden bei Rezeptvorschlägen berücksichtigt.':step===4?'Mehrere Ziele sind möglich.':step===5?'Wähle, wie deine Gerichte am liebsten zubereitet werden sollen. KOLDIS nutzt diese Angabe für passendere Rezeptvorschläge.':'Dein Budget hilft KOLDIS bei der Auswahl günstiger Gerichte.'}</div>${body}<div class="actions">${step>1?'<button class="btn secondary" id="back">← Zurück</button>':'<span></span>'}<button class="btn" id="next">${step===6?'🍽️ Gerichte finden':'Weiter →'}</button></div></section>`;
 if(step===2)bindIngredientSearch();view.querySelectorAll('.choice[data-value]').forEach(b=>b.onclick=()=>{const v=b.dataset.value;if(step===1)state.region=v;if(step===3)state.intolerances=state.intolerances.includes(v)?state.intolerances.filter(x=>x!==v):[...state.intolerances,v];if(step===4)state.goals=state.goals.includes(v)?state.goals.filter(x=>x!==v):[...state.goals,v];if(step===5)state.method=v;save();onboarding()});const range=view.querySelector('#budgetRange');if(range)range.oninput=()=>{state.budget=+range.value;view.querySelector('#budgetValue').textContent=state.budget;save()};view.querySelector('#next').onclick=()=>{if(step<6){state.step++;save();onboarding()}else{state.onboarded=true;state.page='recipes';state.step=1;save();render()}};const back=view.querySelector('#back');if(back)back.onclick=()=>{state.step--;onboarding()}}
 function bindIngredientSearch(){const input=view.querySelector('#ingredientSearch'),results=view.querySelector('#ingredientResults');const draw=()=>{const q=input.value.trim().toLowerCase();const list=ingredients.filter(x=>!q||x.toLowerCase().includes(q)).slice(0,16);results.innerHTML=list.map(x=>`<button class="ingredient-option" data-i="${x}"><span>${x}</span><span>${state.likes.includes(x)?'❤️':state.dislikes.includes(x)?'❌':'+'}</span></button>`).join('');results.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const x=b.dataset.i;const like=state.likes.includes(x),dislike=state.dislikes.includes(x);if(!like&&!dislike)state.likes.push(x);else if(like){state.likes=state.likes.filter(v=>v!==x);state.dislikes.push(x)}else{state.dislikes=state.dislikes.filter(v=>v!==x)}save();draw();renderChips()})};const renderChips=()=>{view.querySelector('#likes').innerHTML=state.likes.map(x=>`<button class="chip like" data-remove-like="${x}">❤️ ${x} ×</button>`).join('')||'<span class="empty-chip">Noch nichts ausgewählt</span>';view.querySelector('#dislikes').innerHTML=state.dislikes.map(x=>`<button class="chip dislike" data-remove-dislike="${x}">❌ ${x} ×</button>`).join('')||'<span class="empty-chip">Noch nichts ausgewählt</span>';view.querySelectorAll('[data-remove-like]').forEach(b=>b.onclick=()=>{state.likes=state.likes.filter(x=>x!==b.dataset.removeLike);save();renderChips();draw()});view.querySelectorAll('[data-remove-dislike]').forEach(b=>b.onclick=()=>{state.dislikes=state.dislikes.filter(x=>x!==b.dataset.removeDislike);save();renderChips();draw()})};input.oninput=draw;draw();renderChips()}
-function filteredRecipes(){let data=[...recipes];if(state.goals.includes('🔥 Low Calorie'))data=data.filter(x=>x.kcal<=650);if(state.goals.includes('💪 High Protein'))data=data.filter(x=>x.p>=40);if(state.goals.includes('💰 Günstig'))data=data.filter(x=>x.price<=3.6);if(state.method!=='Egal')data=data.filter(x=>x.method===state.method);const avoid=[...state.dislikes,...state.intolerances.flatMap(x=>({Laktose:['Milch','Joghurt','Mozzarella','Feta','Käse'],Gluten:['Nudeln','Protein-Pasta','Wrap','Tortilla','Fladenbrot'],Nüsse:['Nüsse','Erdnuss'],Fruktose:[]}[x]||[]))].map(x=>x.toLowerCase());data=data.filter(r=>!avoid.some(a=>r.ingredients.join(' ').toLowerCase().includes(a)));const likes=state.likes.map(x=>x.toLowerCase());return data.map(r=>{const text=(r.name+' '+r.ingredients.join(' ')+' '+r.tags.join(' ')).toLowerCase();const score=likes.reduce((n,l)=>n+(text.includes(l)?1:0),0);return {...r,_score:score}}).sort((a,b)=>b._score-a._score)}
-function recipeCards(data){return `<div class="cards">${data.map(x=>`<article class="recipe"><button class="recipe-open" data-open="${x.id}"><div class="recipe-category">${x.tags[0]||'REZEPT'}</div><div class="recipe-title-row"><h3>${x.name}</h3><span>›</span></div><div class="tags">${x.tags.map(t=>`<span>${t}</span>`).join('')}</div><div class="stats">🔥 ${x.kcal} kcal · 💪 ${x.p} g Protein<br>💶 ca. ${x.price.toFixed(2)} € · ⏱️ ${x.method}</div></button><div class="recipe-actions"><button class="btn add" data-id="${x.id}">🛒 Einkauf</button><button class="btn plan-add" data-plan="${x.id}">📅 Planen</button><button class="btn secondary heart" data-save="${x.id}">${state.saved.some(s=>s.id===x.id)?'♥':'♡'}</button></div></article>`).join('')}</div>`}
-function recipesPage(){const data=filteredRecipes();view.innerHTML=`<section class="recipes-page"><div class="page-intro"><div class="eyebrow">REZEPTE</div><h1>Finde dein Essen</h1><p>Aus ${recipes.length} Gerichten findest du schnell das, was zu deinen Vorlieben, Zielen und deinem Budget passt.</p></div><div class="search-wrap"><span>🔎</span><input id="search" class="search" placeholder="Hähnchen, Pasta, Kartoffeln …"></div><div class="filter-row"><button class="filter active" data-filter="all">Alle</button><button class="filter" data-filter="💪 High Protein">High Protein</button><button class="filter" data-filter="💰 Günstig">Günstig</button><button class="filter" data-filter="⏱️ Schnell kochen">Schnell</button><button class="filter" data-filter="🍱 Meal Prep">Meal Prep</button></div><div class="result-head"><div><strong id="resultCount">${data.length} Gerichte</strong><small> aus ${recipes.length} Rezepten · passend zu deiner Auswahl</small></div><button class="text-link" id="clearFilters">Zurücksetzen</button></div><div id="recipeResults">${data.length?recipeCards(data):'<div class="notice">Keine passenden Rezepte gefunden. Versuche weniger Einschränkungen.</div>'}</div></section>`;
-  let activeTag='all'; const draw=()=>{const q=view.querySelector('#search').value.toLowerCase();let d=filteredRecipes().filter(x=>(x.name+' '+x.ingredients.join(' ')+' '+x.tags.join(' ')).toLowerCase().includes(q));if(activeTag!=='all'){const map={'⏱️ Schnell kochen':'Schnell'};const tag=map[activeTag]||activeTag;d=d.filter(x=>x.tags.includes(tag)||x.tags.includes(activeTag));}view.querySelector('#resultCount').textContent=`${d.length} Gerichte`;view.querySelector('#recipeResults').innerHTML=d.length?recipeCards(d):'<div class="notice">Keine passenden Rezepte gefunden.</div>';bindRecipeButtons()};
+function excludedIngredientWords(){
+  return [...state.dislikes,...state.intolerances.flatMap(x=>({
+    Laktose:['Milch','Joghurt','Mozzarella','Feta','Käse'],
+    Gluten:['Nudeln','Protein-Pasta','Wrap','Tortilla','Fladenbrot'],
+    Nüsse:['Nüsse','Erdnuss'],
+    Fruktose:[]
+  }[x]||[]))].map(x=>x.toLowerCase());
+}
+function recipeMatchesExclusions(r){
+  const avoid=excludedIngredientWords();
+  const text=(r.name+' '+(r.ingredients||[]).join(' ')).toLowerCase();
+  return !avoid.some(a=>text.includes(a));
+}
+/* Browse mode: preferences personalize the order and exclusions remove recipes.
+   Goals and cooking method are NOT hard filters here; the user can choose those
+   explicitly with the filter chips on the recipe page. */
+function browseRecipes(){
+  const likes=state.likes.map(x=>x.toLowerCase());
+  return recipes.filter(recipeMatchesExclusions).map(r=>{
+    const text=(r.name+' '+r.ingredients.join(' ')+' '+r.tags.join(' ')).toLowerCase();
+    const score=likes.reduce((n,l)=>n+(text.includes(l)?1:0),0);
+    return {...r,_score:score};
+  }).sort((a,b)=>b._score-a._score || a.price-b.price);
+}
+function filteredRecipes(){
+  return browseRecipes();
+}
+function recipeCards(data){(data){return `<div class="cards">${data.map(x=>`<article class="recipe"><button class="recipe-open" data-open="${x.id}"><div class="recipe-category">${x.tags[0]||'REZEPT'}</div><div class="recipe-title-row"><h3>${x.name}</h3><span>›</span></div><div class="tags">${x.tags.map(t=>`<span>${t}</span>`).join('')}</div><div class="stats">🔥 ${x.kcal} kcal · 💪 ${x.p} g Protein<br>💶 ca. ${x.price.toFixed(2)} € · ⏱️ ${x.method}</div></button><div class="recipe-actions"><button class="btn add" data-id="${x.id}">🛒 Einkauf</button><button class="btn plan-add" data-plan="${x.id}">📅 Planen</button><button class="btn secondary heart" data-save="${x.id}">${state.saved.some(s=>s.id===x.id)?'♥':'♡'}</button></div></article>`).join('')}</div>`}
+function recipesPage(){
+  let activeTag='all';
+  const renderData=()=>{
+    const q=(view.querySelector('#search')?.value||'').trim().toLowerCase();
+    let d=browseRecipes().filter(x=>
+      !q || (x.name+' '+x.ingredients.join(' ')+' '+x.tags.join(' ')).toLowerCase().includes(q)
+    );
+    if(activeTag!=='all'){
+      const tagMap={'⏱️ Schnell kochen':'Schnell'};
+      const tag=tagMap[activeTag]||activeTag;
+      d=d.filter(x=>x.tags.includes(tag));
+    }
+    return d;
+  };
+  const initial=renderData();
+  view.innerHTML=`<section class="recipes-page">
+    <div class="page-intro">
+      <div class="eyebrow">REZEPTE</div>
+      <h1>Finde dein Essen</h1>
+      <p>Durchsuche alle Gerichte. Deine Vorlieben werden berücksichtigt – mit den Filtern kannst du die Auswahl zusätzlich eingrenzen.</p>
+    </div>
+    <div class="search-wrap"><span>🔎</span><input id="search" class="search" placeholder="Hähnchen, Pasta, Kartoffeln …"></div>
+    <div class="filter-row">
+      <button class="filter active" data-filter="all">Alle</button>
+      <button class="filter" data-filter="High Protein">High Protein</button>
+      <button class="filter" data-filter="Günstig">Günstig</button>
+      <button class="filter" data-filter="Schnell">Schnell</button>
+      <button class="filter" data-filter="Meal Prep">Meal Prep</button>
+      <button class="filter" data-filter="Low Calorie">Low Calorie</button>
+    </div>
+    <div class="result-head">
+      <div><strong id="resultCount">${initial.length} Gerichte</strong><small> aus ${recipes.length} Rezepten</small></div>
+      <button class="text-link" id="clearFilters">Zurücksetzen</button>
+    </div>
+    <div id="recipeResults">${initial.length?recipeCards(initial):'<div class="notice">Keine passenden Rezepte gefunden. Prüfe deine Ausschlüsse im Profil.</div>'}</div>
+  </section>`;
+  const draw=()=>{
+    const d=renderData();
+    view.querySelector('#resultCount').textContent=`${d.length} Gerichte`;
+    view.querySelector('#recipeResults').innerHTML=d.length?recipeCards(d):'<div class="notice">Keine passenden Rezepte für diesen Filter. Wähle „Alle“ oder einen anderen Filter.</div>';
+    bindRecipeButtons();
+  };
   view.querySelector('#search').oninput=draw;
-  view.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{activeTag=b.dataset.filter;view.querySelectorAll('.filter').forEach(x=>x.classList.remove('active'));b.classList.add('active');draw()});
-  view.querySelector('#clearFilters').onclick=()=>{activeTag='all';state.goals=[];state.method='Egal';save();recipesPage()};bindRecipeButtons()}
+  view.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{
+    activeTag=b.dataset.filter;
+    view.querySelectorAll('.filter').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    draw();
+  });
+  view.querySelector('#clearFilters').onclick=()=>{
+    activeTag='all';
+    view.querySelector('#search').value='';
+    view.querySelectorAll('.filter').forEach(x=>x.classList.remove('active'));
+    view.querySelector('[data-filter="all"]').classList.add('active');
+    draw();
+  };
+  bindRecipeButtons();
+}
 function bindRecipeButtons(){view.querySelectorAll('.recipe-open').forEach(b=>b.onclick=()=>openRecipe(Number(b.dataset.open)));view.querySelectorAll('.add').forEach(b=>b.onclick=()=>{const x=recipes.find(r=>r.id==b.dataset.id);state.cart.push(x);save();press(b,'✓ Im Einkauf');});view.querySelectorAll('.plan-add').forEach(b=>b.onclick=()=>{const x=recipes.find(r=>r.id==b.dataset.plan);const day=nextPlanDay();if(day){state.plan[day]=x.id;save();press(b,'✓ '+day)}else press(b,'✓ Woche voll')});view.querySelectorAll('[data-save]').forEach(b=>b.onclick=()=>{const x=recipes.find(r=>r.id==b.dataset.save);state.saved=state.saved.some(s=>s.id===x.id)?state.saved.filter(s=>s.id!==x.id):[...state.saved,x];save();recipesPage()})}
 function planPage(){const planned=Object.entries(state.plan||{});view.innerHTML=`<section class="plan-page"><div class="page-intro"><div class="eyebrow">WOCHENPLAN</div><h1>Deine Woche auf einen Blick</h1><p>Plane sieben einfache Gerichte und lass KOLDIS daraus deinen Einkauf ableiten.</p></div><div class="week-list">${DAYS.map(day=>{const id=state.plan?.[day];const x=recipes.find(r=>r.id===id);return `<article class="day-card"><div class="day-name">${day}</div>${x?`<div class="day-meal"><span>${x.e}</span><div><strong>${x.name}</strong><small>${x.p} g Protein · ${x.price.toFixed(2)} €</small></div><button class="icon-btn" data-remove-day="${day}">×</button></div>`:`<button class="empty-day" data-go-recipes="${day}">+ Gericht auswählen</button>`}</article>`}).join('')}</div><div class="plan-total"><div><span class="eyebrow">GEPLANT</span><strong>${planned.length}/7 Tage</strong></div><button class="btn" id="makeShopping">🛒 Einkauf aus Plan</button></div></section>`;view.querySelectorAll('[data-remove-day]').forEach(b=>b.onclick=()=>{delete state.plan[b.dataset.removeDay];save();planPage()});view.querySelectorAll('[data-go-recipes]').forEach(b=>b.onclick=()=>nav('recipes'));view.querySelector('#makeShopping').onclick=()=>{state.cart=[];planned.forEach(([d,id])=>{const x=recipes.find(r=>r.id===id);if(x)state.cart.push(x)});save();nav('shopping')}}
 function shopping(){const items={};state.cart.forEach(x=>x.ingredients.forEach(i=>items[i]=(items[i]||0)+1));const total=state.cart.reduce((a,x)=>a+x.price,0);const pct=Math.min(100,total/state.budget*100);const storeOptions=['ALDI','LIDL','COMBI','EDEKA','REWE','PENNY','Netto'];view.innerHTML=`<section class="panel"><div class="eyebrow">EINKAUF</div><h1 class="title">🛒 Deine Einkaufsliste</h1><div class="sub">${state.store?`Einkauf bei <strong>${state.store}</strong>`:'Bevor du einkaufst: Wähle deinen Markt.'}</div>${!state.store?`<div class="store-prompt"><h2>Wo gehst du einkaufen?</h2><p>Die Auswahl wird für deine Einkaufsliste gespeichert. Aktuelle Marktpreise können wir später anbinden.</p><div class="choices">${storeOptions.map(x=>`<button class="choice" data-store="${x}">🛒 ${x}</button>`).join('')}</div></div>`:''}${Object.keys(items).map(i=>`<label class="list-row"><input type="checkbox"><span>${i}${items[i]>1?' × '+items[i]:''}</span></label>`).join('')||'<div class="notice">Noch keine Gerichte hinzugefügt. Geh zu „Rezepte“ und füge welche hinzu.</div>'}<div class="total">Geschätzt: ca. ${total.toFixed(2)} €</div><div class="hint">Wochenbudget: ${state.budget} € · Rest: ${Math.max(0,state.budget-total).toFixed(2)} €</div><div class="budget-meter"><div style="width:${pct}%"></div></div>${state.cart.length?'<button class="btn secondary" id="clearCart" style="margin-top:14px">Einkauf leeren</button>':''}</section>`;view.querySelectorAll('[data-store]').forEach(b=>b.onclick=()=>{state.store=b.dataset.store;save();shopping()});const c=view.querySelector('#clearCart');if(c)c.onclick=()=>{state.cart=[];save();shopping()}}

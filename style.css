@@ -91,3 +91,17 @@ body{background:var(--k-bg);color:var(--k-text);font-family:Inter,system-ui,-app
 .koldis-prep-step>span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--k-accent,#b9ff35);color:#0b0e0c;font-weight:800;font-size:12px}
 .koldis-prep-step p{margin:3px 0 0;color:var(--k-text,#f5f7f5);font-size:14px;line-height:1.45}
 .koldis-prep-text{background:var(--k-surface,#151a18);border:1px solid var(--k-border,rgba(255,255,255,.08));border-radius:18px;padding:15px;color:var(--k-text,#f5f7f5);font-size:14px;line-height:1.5}
+
+/* 0.7.1 mobile polish */
+.filter-row{padding-left:2px;padding-right:2px;scroll-snap-type:x proximity}
+.filter{scroll-snap-align:start}
+.recipe{min-height:100%}
+.recipes-page{padding-bottom:28px}
+@media(max-width:600px){
+  .recipes-page{gap:15px}
+  .page-intro p{font-size:15px;line-height:1.5}
+  .cards{grid-template-columns:1fr 1fr;gap:10px}
+  .recipe{padding:12px}
+  .recipe-actions{grid-template-columns:1fr 1fr 36px}
+  .recipe-actions .btn{min-width:0}
+}
