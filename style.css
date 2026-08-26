@@ -105,3 +105,17 @@ body{background:var(--k-bg);color:var(--k-text);font-family:Inter,system-ui,-app
   .recipe-actions{grid-template-columns:1fr 1fr 36px}
   .recipe-actions .btn{min-width:0}
 }
+
+/* 0.7.2 mobile fixes */
+html,body{max-width:100%;overflow-x:hidden}
+.recipes-page,.page-intro,.search-wrap,.filter-row,.cards{max-width:100%;box-sizing:border-box}
+.filter-row{width:100%;overflow-x:auto;overflow-y:hidden;display:flex;flex-wrap:nowrap;padding:2px 0 8px 2px;scrollbar-width:none}
+.filter-row::-webkit-scrollbar{display:none}
+.filter-row .filter{flex:0 0 auto}
+.cards{width:100%}
+@media(max-width:600px){
+  .recipes-page{padding-left:16px;padding-right:16px}
+  .page-intro h1{font-size:clamp(38px,10vw,54px);line-height:1.02}
+  .page-intro p{font-size:16px;line-height:1.45}
+  .search-wrap{width:100%}
+}

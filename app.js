@@ -207,17 +207,34 @@ function nextPlanDay(){for(const d of DAYS)if(!state.plan?.[d])return d;return n
 function onboarding(){const titles=['Wo kommst du her?','Was magst du – und was magst du nicht?','Gibt es etwas, das du nicht verträgst?','Was ist dein Ziel?','Wie möchtest du kochen?','Wie viel möchtest du ausgeben?'];const step=state.step;let body='';if(step===1){const opts=['Niedersachsen','Nordrhein-Westfalen','Schleswig-Holstein','Hamburg','Bremen','Hessen'];body=`<div class="choices">${opts.map(x=>`<button class="choice ${selected([state.region],x)}" data-value="${x}">${x}</button>`).join('')}</div>`}else if(step===2){body=`<div class="ingredient-box"><input id="ingredientSearch" class="search" placeholder="🔎 Zutat suchen, z.B. Hähnchen..."><div id="ingredientResults" class="ingredient-results"></div></div><div class="selected-section"><div><strong>❤️ Mag ich</strong><div id="likes" class="chips"></div></div><div><strong>❌ Mag ich nicht</strong><div id="dislikes" class="chips"></div></div></div><div class="hint">Klicke eine Zutat an, um sie zu deinen Vorlieben hinzuzufügen. Danach kannst du zwischen ❤️ und ❌ wechseln.</div>`}else if(step===3){const opts=['Laktose','Gluten','Nüsse','Fruktose','Keine Angabe'];body=`<div class="choices">${opts.map(x=>`<button class="choice ${selected(state.intolerances,x)}" data-value="${x}">${x}</button>`).join('')}</div><div class="notice">⚠️ Bei Allergien immer die Angaben auf der tatsächlichen Produktverpackung prüfen.</div>`}else if(step===4){const opts=['💪 High Protein','🔥 Low Calorie','💰 Günstig','⚖️ Gewicht halten','🥗 Gesünder essen','🍱 Meal Prep','⏱️ Schnell kochen'];body=`<div class="sub">Mehrere Ziele sind möglich.</div><div class="choices">${opts.map(x=>`<button class="choice ${selected(state.goals,x)}" data-value="${x}">${x}</button>`).join('')}</div>`}else if(step===5){const opts=[['Egal','Keine Einschränkung'],['Pfanne','Schnell & unkompliziert'],['Ofen','Ideal für Blechgerichte'],['Mikrowelle','Schnell aufgewärmt'],['Airfryer','Knusprig & schnell'],['Topf','Für Pasta, Reis & Bowls']];body=`<div class="choices">${opts.map(([x,d])=>`<button class="choice ${selected([state.method],x)}" data-value="${x}"><strong>${x}</strong><small>${d}</small></button>`).join('')}</div>`}else{body=`<div class="budget"><span id="budgetValue">${state.budget}</span> €</div><input id="budgetRange" class="range" type="range" min="25" max="150" step="5" value="${state.budget}"><div class="hint">Geschätztes Wochenbudget. Später können echte Marktpreise automatisch einfließen.</div>`}view.innerHTML=`<section class="panel"><div class="progress">${Array.from({length:6},(_,i)=>`<div class="bar ${i+1<=step?'on':''}"></div>`).join('')}</div><div class="eyebrow">EINRICHTUNG · SCHRITT ${step} VON 6</div><h1 class="title">${titles[step-1]}</h1><div class="sub">${step===1?'Damit KOLDIS später passende Angebote und Preise einordnen kann.':step===2?'Suche nach Zutaten und wähle beliebig viele Vorlieben aus.':step===3?'Diese Angaben werden bei Rezeptvorschlägen berücksichtigt.':step===4?'Mehrere Ziele sind möglich.':step===5?'Wähle, wie deine Gerichte am liebsten zubereitet werden sollen. KOLDIS nutzt diese Angabe für passendere Rezeptvorschläge.':'Dein Budget hilft KOLDIS bei der Auswahl günstiger Gerichte.'}</div>${body}<div class="actions">${step>1?'<button class="btn secondary" id="back">← Zurück</button>':'<span></span>'}<button class="btn" id="next">${step===6?'🍽️ Gerichte finden':'Weiter →'}</button></div></section>`;
 if(step===2)bindIngredientSearch();view.querySelectorAll('.choice[data-value]').forEach(b=>b.onclick=()=>{const v=b.dataset.value;if(step===1)state.region=v;if(step===3)state.intolerances=state.intolerances.includes(v)?state.intolerances.filter(x=>x!==v):[...state.intolerances,v];if(step===4)state.goals=state.goals.includes(v)?state.goals.filter(x=>x!==v):[...state.goals,v];if(step===5)state.method=v;save();onboarding()});const range=view.querySelector('#budgetRange');if(range)range.oninput=()=>{state.budget=+range.value;view.querySelector('#budgetValue').textContent=state.budget;save()};view.querySelector('#next').onclick=()=>{if(step<6){state.step++;save();onboarding()}else{state.onboarded=true;state.page='recipes';state.step=1;save();render()}};const back=view.querySelector('#back');if(back)back.onclick=()=>{state.step--;onboarding()}}
 function bindIngredientSearch(){const input=view.querySelector('#ingredientSearch'),results=view.querySelector('#ingredientResults');const draw=()=>{const q=input.value.trim().toLowerCase();const list=ingredients.filter(x=>!q||x.toLowerCase().includes(q)).slice(0,16);results.innerHTML=list.map(x=>`<button class="ingredient-option" data-i="${x}"><span>${x}</span><span>${state.likes.includes(x)?'❤️':state.dislikes.includes(x)?'❌':'+'}</span></button>`).join('');results.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const x=b.dataset.i;const like=state.likes.includes(x),dislike=state.dislikes.includes(x);if(!like&&!dislike)state.likes.push(x);else if(like){state.likes=state.likes.filter(v=>v!==x);state.dislikes.push(x)}else{state.dislikes=state.dislikes.filter(v=>v!==x)}save();draw();renderChips()})};const renderChips=()=>{view.querySelector('#likes').innerHTML=state.likes.map(x=>`<button class="chip like" data-remove-like="${x}">❤️ ${x} ×</button>`).join('')||'<span class="empty-chip">Noch nichts ausgewählt</span>';view.querySelector('#dislikes').innerHTML=state.dislikes.map(x=>`<button class="chip dislike" data-remove-dislike="${x}">❌ ${x} ×</button>`).join('')||'<span class="empty-chip">Noch nichts ausgewählt</span>';view.querySelectorAll('[data-remove-like]').forEach(b=>b.onclick=()=>{state.likes=state.likes.filter(x=>x!==b.dataset.removeLike);save();renderChips();draw()});view.querySelectorAll('[data-remove-dislike]').forEach(b=>b.onclick=()=>{state.dislikes=state.dislikes.filter(x=>x!==b.dataset.removeDislike);save();renderChips();draw()})};input.oninput=draw;draw();renderChips()}
+function normalizePrefValue(v){
+  return String(v ?? '')
+    .replace(/^❤️\s*/,'')
+    .replace(/^❌\s*/,'')
+    .replace(/\s*[×x]\s*$/,'')
+    .trim()
+    .toLowerCase();
+}
 function excludedIngredientWords(){
-  return [...state.dislikes,...state.intolerances.flatMap(x=>({
-    Laktose:['Milch','Joghurt','Mozzarella','Feta','Käse'],
-    Gluten:['Nudeln','Protein-Pasta','Wrap','Tortilla','Fladenbrot'],
-    Nüsse:['Nüsse','Erdnuss'],
-    Fruktose:[]
-  }[x]||[]))].map(x=>x.toLowerCase());
+  const intoleranceMap={
+    'Laktose':['Milch','Joghurt','Mozzarella','Feta','Käse'],
+    'Gluten':['Nudeln','Protein-Pasta','Wrap','Tortilla','Fladenbrot'],
+    'Nüsse':['Nüsse','Erdnuss'],
+    'Fruktose':[]
+  };
+  const direct=(Array.isArray(state.dislikes)?state.dislikes:[])
+    .map(normalizePrefValue)
+    .filter(Boolean);
+  const intolerance=(Array.isArray(state.intolerances)?state.intolerances:[])
+    .flatMap(x=>intoleranceMap[String(x).trim()]||[])
+    .map(normalizePrefValue)
+    .filter(Boolean);
+  return [...new Set([...direct,...intolerance])];
 }
 function recipeMatchesExclusions(r){
   const avoid=excludedIngredientWords();
-  const text=(r.name+' '+(r.ingredients||[]).join(' ')).toLowerCase();
+  if(!avoid.length) return true;
+  const text=(String(r.name||'')+' '+(r.ingredients||[]).join(' ')).toLowerCase();
   return !avoid.some(a=>text.includes(a));
 }
 /* Browse mode: preferences personalize the order and exclusions remove recipes.
@@ -245,7 +262,15 @@ function recipesPage(){
     if(activeTag!=='all'){
       const tagMap={'⏱️ Schnell kochen':'Schnell'};
       const tag=tagMap[activeTag]||activeTag;
-      d=d.filter(x=>x.tags.includes(tag));
+      d=d.filter(x=>{
+        const tags=x.tags||[];
+        if(tags.includes(tag)) return true;
+        if(tag==='Günstig') return Number(x.price||999) <= 3.50;
+        if(tag==='Schnell') return ['Egal','Pfanne','Mikrowelle','Airfryer'].includes(x.method) && Number(x.kcal||9999) >= 0;
+        if(tag==='Low Calorie') return Number(x.kcal||9999) <= 550;
+        if(tag==='High Protein') return Number(x.p||0) >= 40;
+        return false;
+      });
     }
     return d;
   };
