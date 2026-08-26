@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KOLDIS – Dein Essen. Dein Markt. Dein Budget.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app" id="app">
+  <header class="topbar">
+    <div>
+      <div class="brand">🥗 KOLDIS</div>
+      <div class="tagline">Dein Essen. Dein Markt. Dein Budget.</div>
+    </div>
+    <button class="cart-pill" data-nav="shopping">🛒 <span id="cartCount">0</span></button>
+  </header>
+
+  <main id="view"></main>
+
+  <nav class="bottom-nav" aria-label="Hauptnavigation">
+    <button data-nav="home">🏠<span>Start</span></button>
+    <button data-nav="recipes">🔎<span>Rezepte</span></button>
+    <button data-nav="shopping">🛒<span>Einkauf</span></button>
+    <button data-nav="saved">❤️<span>Favoriten</span></button>
+    <button data-nav="profile">👤<span>Profil</span></button>
+  </nav>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
