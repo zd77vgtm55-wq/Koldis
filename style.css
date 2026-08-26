@@ -6,10 +6,10 @@
 .intro-copy p{color:#9eabb6;line-height:1.55;margin:0 0 14px;max-width:560px}
 .intro-steps{display:flex;flex-wrap:wrap;gap:7px}
 .intro-step{border:1px solid #30404d;background:#151e26;color:#d9e0e5;border-radius:999px;padding:8px 10px;font-size:11px;font-weight:800}
-.intro-visual{display:block;width:100%;max-width:230px;height:auto;object-fit:contain;object-position:center;border-radius:18px;border:1px solid #34414e;background:#0b0f13;box-shadow:0 16px 36px rgba(0,0,0,.28)}
+.intro-visual{display:block;width:100%;max-width:100%;height:auto !important;aspect-ratio:1536 / 784;object-fit:contain !important;object-position:center;border-radius:18px;border:1px solid #34414e;background:#0b0f13;box-shadow:0 16px 36px rgba(0,0,0,.28)}
 @media(max-width:620px){
   .intro-card{grid-template-columns:1fr;gap:14px;padding:15px;margin-top:12px}
-  .intro-visual{max-width:100%;width:100%;height:auto;margin:0 auto;object-fit:contain}
+  .intro-visual{display:block;width:100%;max-width:100%;height:auto !important;aspect-ratio:1536 / 784;object-fit:contain !important;margin:0 auto}
   .intro-copy h2{font-size:25px}
   .intro-copy p{font-size:13px}
 }
