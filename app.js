@@ -251,7 +251,7 @@ function browseRecipes(){
 function filteredRecipes(){
   return browseRecipes();
 }
-function recipeCards(data){(data){return `<div class="cards">${data.map(x=>`<article class="recipe"><button class="recipe-open" data-open="${x.id}"><div class="recipe-category">${x.tags[0]||'REZEPT'}</div><div class="recipe-title-row"><h3>${x.name}</h3><span>›</span></div><div class="tags">${x.tags.map(t=>`<span>${t}</span>`).join('')}</div><div class="stats">🔥 ${x.kcal} kcal · 💪 ${x.p} g Protein<br>💶 ca. ${x.price.toFixed(2)} € · ⏱️ ${x.method}</div></button><div class="recipe-actions"><button class="btn add" data-id="${x.id}">🛒 Einkauf</button><button class="btn plan-add" data-plan="${x.id}">📅 Planen</button><button class="btn secondary heart" data-save="${x.id}">${state.saved.some(s=>s.id===x.id)?'♥':'♡'}</button></div></article>`).join('')}</div>`}
+function recipeCards(data){return `<div class="cards">${data.map(x=>`<article class="recipe"><button class="recipe-open" data-open="${x.id}"><div class="recipe-category">${x.tags[0]||'REZEPT'}</div><div class="recipe-title-row"><h3>${x.name}</h3><span>›</span></div><div class="tags">${x.tags.map(t=>`<span>${t}</span>`).join('')}</div><div class="stats">🔥 ${x.kcal} kcal · 💪 ${x.p} g Protein<br>💶 ca. ${x.price.toFixed(2)} € · ⏱️ ${x.method}</div></button><div class="recipe-actions"><button class="btn add" data-id="${x.id}">🛒 Einkauf</button><button class="btn plan-add" data-plan="${x.id}">📅 Planen</button><button class="btn secondary heart" data-save="${x.id}">${state.saved.some(s=>s.id===x.id)?'♥':'♡'}</button></div></article>`).join('')}</div>`}
 function recipesPage(){
   let activeTag='all';
   const renderData=()=>{
