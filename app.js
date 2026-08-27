@@ -435,7 +435,7 @@ const DAYS=['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Son
 const FILTERS=['Alle','High Protein','Günstig','Schnell','Meal Prep','Low Calorie','Gesünder essen'];
 const STORES=['ALDI','LIDL','COMBI','EDEKA','REWE','PENNY','Netto'];
 const KEY='koldis-0.9.2-local-v1';
-const defaults={page:'home',budget:60,store:'',goals:['High Protein'],likes:[],dislikes:[],intolerances:[],method:'Egal',plan:{},plans:[{id:'w1',label:'Woche 1',plan:{}}],currentPlan:0,cart:[],saved:[],filter:'Alle',query:'',theme:'dark',portionDefault:4,onboardingDone:false};
+const defaults={page:'home',budget:60,store:'',goals:['High Protein'],likes:[],dislikes:[],intolerances:[],method:'Egal',plan:{},plans:[{id:'w1',label:'Woche 1',plan:{}}],currentPlan:0,cart:[],customShopping:[],shoppingChecked:{},saved:[],filter:'Alle',query:'',theme:'dark',portionDefault:4,onboardingDone:false};
 function load(){
   try{
     const x=JSON.parse(localStorage.getItem(KEY)||'null');
@@ -446,6 +446,8 @@ function load(){
     if(!Array.isArray(st.dislikes)) st.dislikes=[];
     if(!Array.isArray(st.intolerances)) st.intolerances=[];
     if(!Array.isArray(st.cart)) st.cart=[];
+    if(!Array.isArray(st.customShopping)) st.customShopping=[];
+    if(!st.shoppingChecked || typeof st.shoppingChecked!=='object') st.shoppingChecked={};
     if(!Array.isArray(st.saved)) st.saved=[];
     if(!st.filter) st.filter='Alle';
     if(typeof st.query!=='string') st.query='';
@@ -642,32 +644,20 @@ function shopping(){
     return sum+(r?.price||0)*x.portions;
   },0);
 
-  if(!entries.length){
-    shell(`<section class="shopping-page">
-      <div class="eyebrow">EINKAUF</div>
-      <h1>Deine Einkaufsliste</h1>
-      <p class="lead">Noch nichts auf deiner Einkaufsliste.</p>
-      <div class="empty shopping-empty">
-        <div style="font-size:3rem">🛒</div>
-        <h2>Liste ist noch leer</h2>
-        <p>Plane zuerst Gerichte oder füge ein Rezept direkt zum Einkauf hinzu.</p>
-        <button class="primary" id="goRecipes">🍽️ Gerichte entdecken</button>
-      </div>
-    </section>`);
-    app.querySelector('#goRecipes').onclick=()=>nav('recipes');
-    return;
-  }
-
   // Zentrale Einkaufsliste: gleiche Zutaten werden zusammengezählt.
+  // Auch eigene Einträge werden hier einsortiert und mit Rezeptzutaten kombiniert.
   const grouped=new Map();
 
+  function normalizeName(name){return String(name).trim().toLowerCase().replace(/\s+/g,' ')}
   function addIngredient(raw){
     const original=String(raw).trim();
-    const match=original.match(/^(\d+(?:[.,]\d+)?)\s*(kg|g|mg|l|ml|EL|TL|stk\\.?|stück|eier|ei|wraps?|tortillas?)\s+(.+)$/i);
+    if(!original)return;
+    const match=original.match(/^(\d+(?:[.,]\d+)?)\s*(kg|g|mg|l|ml|EL|TL|stk\.?|stück|eier|ei|wraps?|tortillas?)\s+(.+)$/i);
 
     if(!match){
-      const key=original.toLowerCase().replace(/\s+/g,' ');
-      if(!grouped.has(key)) grouped.set(key,{name:original,amount:null,unit:''});
+      const key=normalizeName(original);
+      const item=grouped.get(key)||{name:original,amount:null,unit:'',key};
+      grouped.set(key,item);
       return;
     }
 
@@ -686,8 +676,9 @@ function shopping(){
     else if(u==='el')unit='EL';
     else if(u==='tl')unit='TL';
 
-    const key=name.toLowerCase().replace(/\s+/g,' ')+'|'+unit.toLowerCase();
-    const item=grouped.get(key)||{name,amount:0,unit};
+    const key=normalizeName(name)+'|'+unit.toLowerCase();
+    const item=grouped.get(key)||{name,amount:0,unit,key};
+    if(item.amount===null)item.amount=0;
     item.amount+=amount;
     grouped.set(key,item);
   }
@@ -696,36 +687,79 @@ function shopping(){
     const r=RECIPES.find(x=>x.id===entry.id);
     if(r) scaledIngredients(r,entry.portions).forEach(addIngredient);
   });
+  (state.customShopping||[]).forEach(addIngredient);
 
   const items=[...grouped.values()];
   const formatIngredient=item=>item.amount===null
     ? esc(item.name)
     : `${formatQty(item.amount)} ${esc(item.unit)} ${esc(item.name)}`;
 
-  const rows=items.map((item,index)=>`
-    <li class="shopping-item">
+  if(!items.length){
+    shell(`<section class="shopping-page">
+      <div class="eyebrow">EINKAUF</div>
+      <h1>Deine Einkaufsliste</h1>
+      <p class="lead">Noch nichts auf deiner Einkaufsliste.</p>
+      <div class="shopping-add">
+        <h2>➕ Eigene Sachen hinzufügen</h2>
+        <div class="shopping-add-row">
+          <input id="customShoppingInput" type="text" placeholder="z. B. 2 Flaschen Wasser, Küchenrolle, 5 Eier">
+          <button class="primary" id="addCustomShopping">Hinzufügen</button>
+        </div>
+        <p class="shopping-hint">Du kannst Mengen angeben. Gleiche Zutaten werden automatisch zusammengezählt.</p>
+      </div>
+      <div class="empty shopping-empty">
+        <div style="font-size:3rem">🛒</div>
+        <h2>Liste ist noch leer</h2>
+        <p>Plane Gerichte oder füge eigene Sachen hinzu.</p>
+        <button class="primary" id="goRecipes">🍽️ Gerichte entdecken</button>
+      </div>
+    </section>`);
+    bindShoppingAdd();
+    app.querySelector('#goRecipes').onclick=()=>nav('recipes');
+    return;
+  }
+
+  const rows=items.map((item,index)=>{
+    const checked=!!state.shoppingChecked[item.key];
+    return `<li class="shopping-item ${checked?'is-checked':''}">
       <label>
-        <input type="checkbox" data-shopping-check="${index}">
+        <input type="checkbox" data-shopping-check="${index}" data-shopping-key="${esc(item.key)}" ${checked?'checked':''}>
         <span>${formatIngredient(item)}</span>
       </label>
-    </li>`).join('');
+    </li>`;
+  }).join('');
+
+  const customRows=(state.customShopping||[]).map((item,index)=>`<span class="custom-chip">${esc(item)} <button type="button" data-remove-custom="${index}" aria-label="${esc(item)} löschen">×</button></span>`).join('');
 
   shell(`<section class="shopping-page">
     <div class="eyebrow">EINKAUF</div>
     <div class="shopping-head">
       <div>
         <h1>Deine Einkaufsliste</h1>
-        <p class="lead">${items.length} Zutaten · ${entries.length} Gerichte · geschätzt ${money(total)} €</p>
+        <p class="lead">${items.length} Positionen · ${entries.length} Gerichte · geschätzt ${money(total)} €</p>
       </div>
-      <button class="secondary" id="clearCart">🗑️ Liste leeren</button>
+      <div class="shopping-head-actions">
+        <button class="secondary" id="printShopping">🖨️ Drucken</button>
+        <button class="secondary" id="clearCart">🗑️ Liste leeren</button>
+      </div>
+    </div>
+
+    <div class="shopping-add">
+      <h2>➕ Eigene Sachen hinzufügen</h2>
+      <div class="shopping-add-row">
+        <input id="customShoppingInput" type="text" placeholder="z. B. 2 Flaschen Wasser, Küchenrolle, 5 Eier">
+        <button class="primary" id="addCustomShopping">Hinzufügen</button>
+      </div>
+      <p class="shopping-hint">Tipp: <b>5 Eier</b> wird mit Eiern aus deinen Rezepten addiert. Du kannst auch einfach „Küchenrolle“ eingeben.</p>
+      ${customRows?`<div class="custom-chips">${customRows}</div>`:''}
     </div>
 
     <div class="shopping-summary">
       <h2>🛒 Einkauf auf einen Blick</h2>
-      <p>Gleiche Zutaten werden automatisch zusammengezählt.</p>
+      <p>Gleiche Zutaten werden automatisch zusammengezählt – damit du im Laden nicht zurücklaufen musst.</p>
     </div>
 
-    <div class="shopping-list">
+    <div class="shopping-list" id="shoppingPrintArea">
       <div class="shopping-list-title">
         <h2>Alles einkaufen</h2>
         <span>${items.length} Positionen</span>
@@ -739,19 +773,58 @@ function shopping(){
     </div>
   </section>`);
 
+  bindShoppingAdd();
+
   app.querySelectorAll('[data-shopping-check]').forEach(box=>{
-    box.onchange=()=>box.closest('label')?.classList.toggle('checked',box.checked);
+    box.onchange=()=>{
+      const key=box.dataset.shoppingKey;
+      state.shoppingChecked[key]=box.checked;
+      save();
+      box.closest('.shopping-item')?.classList.toggle('is-checked',box.checked);
+    };
   });
+
+  app.querySelectorAll('[data-remove-custom]').forEach(btn=>{
+    btn.onclick=()=>{
+      const index=Number(btn.dataset.removeCustom);
+      state.customShopping.splice(index,1);
+      save();
+      render();
+    };
+  });
+
+  app.querySelector('#printShopping').onclick=()=>{
+    window.print();
+  };
 
   app.querySelector('#clearCart').onclick=()=>{
     if(confirm('Möchtest du die komplette Einkaufsliste leeren?')){
       state.cart=[];
+      state.customShopping=[];
+      state.shoppingChecked={};
       save();
       render();
     }
   };
 
   app.querySelector('#backPlan').onclick=()=>nav('plan');
+}
+
+function bindShoppingAdd(){
+  const input=app.querySelector('#customShoppingInput');
+  const button=app.querySelector('#addCustomShopping');
+  if(!input||!button)return;
+  const add=()=>{
+    const value=input.value.trim();
+    if(!value)return;
+    if(!Array.isArray(state.customShopping))state.customShopping=[];
+    state.customShopping.push(value);
+    save();
+    render();
+    setTimeout(()=>app.querySelector('#customShoppingInput')?.focus(),0);
+  };
+  button.onclick=add;
+  input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add()}};
 }
 function profile(){
   const isGuest=authMode==='guest' && !currentUser;
