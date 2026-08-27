@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07110c">
+<title>KOLDIS Admin</title>
+<link rel="stylesheet" href="admin.css?v=0.9.6">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const KOLDIS_SUPABASE_URL="https://fyiuokunfvxqjgyvbxoc.supabase.co";
+const KOLDIS_SUPABASE_PUBLISHABLE_KEY="sb_publishable_E-mB0GYItOQ-Z6RWBX4Iyw_UhJULVAl";
+window.koldisSupabase=window.supabase.createClient(KOLDIS_SUPABASE_URL,KOLDIS_SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+</script>
+</head>
+<body>
+<div id="adminApp"><div class="loading">KOLDIS Admin wird geladen …</div></div>
+<script src="admin.js?v=0.9.6" defer></script>
+</body>
+</html>

@@ -19,6 +19,14 @@ const AUTH_ACTIVITY_KEY = 'koldis-auth-activity-v1';
 const AUTH_REMEMBER_KEY = 'koldis-auth-remember-v1';
 const GUEST_SESSION_KEY = 'koldis-guest-session-v1';
 const AUTH_IDLE_MS = 60 * 60 * 1000;
+const KOLDIS_ANALYTICS_SESSION_KEY='koldis-analytics-session-v1';
+function analyticsSessionId(){
+  try{let id=localStorage.getItem(KOLDIS_ANALYTICS_SESSION_KEY);if(!id){id=(crypto?.randomUUID?.()||('s-'+Date.now()+'-'+Math.random().toString(36).slice(2)));localStorage.setItem(KOLDIS_ANALYTICS_SESSION_KEY,id)}return id}catch{return 'anonymous'}
+}
+async function trackEvent(event_name,metadata={}){
+  if(!KOLDIS_AUTH.client) return;
+  try{await KOLDIS_AUTH.client.from('koldis_events').insert({event_name,user_id:currentUser?.id||null,session_id:analyticsSessionId(),metadata})}catch(e){console.debug('KOLDIS analytics:',e)}
+}
 
 function getRememberChoice(){
   try { return localStorage.getItem(AUTH_REMEMBER_KEY) !== '0'; } catch { return true; }
@@ -534,7 +542,7 @@ function money(n){return Number(n).toFixed(2).replace('.',',')}
 function excluded(r){const bad=[...(state.dislikes||[]),...(state.intolerances||[])].map(x=>String(x).toLowerCase());const text=(r.name+' '+r.ingredients.join(' ')).toLowerCase();if(bad.some(x=>x&&text.includes(x)))return true;if((state.intolerances||[]).includes('Laktose')&&/joghurt|mozzarella|feta|käse|milch/.test(text))return true;if((state.intolerances||[]).includes('Gluten')&&/nudel|pasta|wrap|tortilla|fladen|couscous/.test(text))return true;if((state.intolerances||[]).includes('Nüsse')&&/nuss|erdnuss/.test(text))return true;return false}
 function matches(r){if(excluded(r))return false;const q=state.query.trim().toLowerCase();if(q&&!(`${r.name} ${r.ingredients.join(' ')} ${r.tags.join(' ')}`).toLowerCase().includes(q))return false;switch(state.filter){case'High Protein':return r.p>=40;case'Günstig':return r.price<=3.5;case'Schnell':return r.tags.includes('Schnell')||r.method==='Pfanne'||r.method==='Mikrowelle'||r.method==='Airfryer';case'Meal Prep':return r.tags.includes('Meal Prep');case'Low Calorie':return r.kcal<=550;case'Gesünder essen':return r.tags.includes('Gesünder essen');default:return true}}
 function sortedRecipes(){const likes=(state.likes||[]).map(x=>String(x).toLowerCase());return RECIPES.filter(matches).map(r=>{const text=(r.name+' '+r.ingredients.join(' ')+' '+r.tags.join(' ')).toLowerCase();const score=likes.reduce((n,l)=>n+(text.includes(l)?1:0),0);return {...r,_score:score}}).sort((a,b)=>b._score-a._score||a.price-b.price)}
-function nav(page){if(!state.onboardingDone){onboarding();return}state.page=page;save();render()}
+function nav(page){if(!state.onboardingDone){onboarding();return}if(state.page!==page)trackEvent('nav_'+page);state.page=page;save();render()}
 function header(){const count=state.cart.length;return `<header class="top"><div><div class="brand">🥗 KOLDIS</div><div class="tagline">Dein Essen. Dein Markt. Dein Budget.</div></div><button class="cart" data-nav="shopping">🛒 <b>${count}</b></button></header>`}
 function bottom(){const items=[['home','🏠','Start'],['recipes','🍽️','Rezepte'],['plan','📅','Plan'],['shopping','🛒','Einkauf'],['profile','👤','Profil']];return `<nav class="bottom">${items.map(([p,i,l])=>`<button class="${state.page===p?'active':''}" data-nav="${p}"><span>${i}</span><small>${l}</small>${p==='shopping'&&state.cart.length?`<b>${state.cart.length}</b>`:''}</button>`).join('')}</nav>`}
 function shell(content){app.innerHTML=`${header()}<main>${content}</main>${bottom()}`;app.querySelectorAll('[data-nav]').forEach(b=>b.onclick=()=>nav(b.dataset.nav))}
@@ -551,6 +559,7 @@ function bindRecipeActions(){
 }
 function nextDay(){syncPlan();return DAYS.find(d=>!state.plan[d])}
 function openRecipe(id, initialPortions=state.portionDefault||4){
+  trackEvent('recipe_open',{recipe_id:id});
   const r=RECIPES.find(x=>x.id===id); if(!r)return;
   const day=nextDay(); let portions=Math.max(1,Math.min(12,Number(initialPortions)||4));
   const renderDetail=()=>{
@@ -569,7 +578,7 @@ function openRecipe(id, initialPortions=state.portionDefault||4){
   };
   renderDetail();
 }
-function autoPlan(){syncPlan();const list=sortedRecipes();const used=[];const plan={};let total=0;for(const d of DAYS){let pick=list.find(r=>!used.includes(r.id)&& (total+r.price<=state.budget || used.length<2));if(!pick)pick=list.find(r=>!used.includes(r.id));if(!pick)break;used.push(pick.id);plan[d]=pick.id;total+=pick.price;}state.plan=plan;state.plans[state.currentPlan].plan=plan;save();nav('plan')}
+function autoPlan(){trackEvent('plan_auto');syncPlan();const list=sortedRecipes();const used=[];const plan={};let total=0;for(const d of DAYS){let pick=list.find(r=>!used.includes(r.id)&& (total+r.price<=state.budget || used.length<2));if(!pick)pick=list.find(r=>!used.includes(r.id));if(!pick)break;used.push(pick.id);plan[d]=pick.id;total+=pick.price;}state.plan=plan;state.plans[state.currentPlan].plan=plan;save();nav('plan')}
 function planPage(){
   syncPlan();
   const total=Object.values(state.plan).reduce((s,id)=>s+(RECIPES.find(r=>r.id===id)?.price||0),0);
@@ -634,6 +643,7 @@ function onboarding(){
 function shellOnboarding(content){app.innerHTML=`<main>${content}</main>`}
 
 function shopping(){
+  trackEvent('shopping_open');
   const entries=cartEntries().map(x=>({
     id:Number(x.id),
     portions:Math.max(1,Math.min(12,Number(x.portions)||state.portionDefault||4))
@@ -819,6 +829,7 @@ function bindShoppingAdd(){
     if(!value)return;
     if(!Array.isArray(state.customShopping))state.customShopping=[];
     state.customShopping.push(value);
+    trackEvent('shopping_custom_add');
     save();
     render();
     setTimeout(()=>app.querySelector('#customShoppingInput')?.focus(),0);
@@ -856,11 +867,13 @@ function profile(){
     <button class="secondary full" id="market">🛒 Markt ändern</button>
     <button class="secondary full" id="prefs">⚙️ Vorlieben & Ziele ändern</button>
     <button class="secondary full" id="budget">💶 Budget ändern</button>
+    <button class="secondary full" id="feedback">💬 Feedback geben</button>
   </section>`);
 
   app.querySelector('#market').onclick=()=>market();
   app.querySelector('#prefs').onclick=()=>prefs();
   app.querySelector('#budget').onclick=()=>budgetPage();
+  app.querySelector('#feedback').onclick=()=>feedbackPage();
   app.querySelector('#logout')?.addEventListener('click',logoutKoldis);
   app.querySelector('#loginFromProfile')?.addEventListener('click',()=>showAuth());
   app.querySelector('#signupFromProfile')?.addEventListener('click',()=>{
@@ -868,8 +881,22 @@ function profile(){
     setTimeout(()=>app.querySelector('#showSignup')?.click(),0);
   });
 }
+function feedbackPage(){
+  shell(`<section class="panel feedback-page"><button class="back" id="feedbackBack">← Zurück</button><div class="eyebrow">FEEDBACK</div><h1>Deine Meinung zählt.</h1><p class="lead">Was gefällt dir an KOLDIS und was können wir besser machen?</p><div class="feedback-rating"><h2>Wie gefällt dir KOLDIS?</h2><div class="feedback-stars">${[1,2,3,4,5].map(n=>`<button type="button" data-rating="${n}">★</button>`).join('')}</div></div><label>Kategorie<select id="feedbackCategory"><option>Verbesserungsvorschlag</option><option>Fehler melden</option><option>Lob</option><option>Frage</option><option>Sonstiges</option></select></label><label>Dein Feedback<textarea id="feedbackMessage" maxlength="3000" rows="7" placeholder="Schreib uns, was du denkst …"></textarea></label><button class="primary full" id="feedbackSend">💬 Feedback senden</button><div id="feedbackStatus"></div></section>`);
+  let rating=0;
+  const paint=()=>app.querySelectorAll('[data-rating]').forEach(b=>b.classList.toggle('selected',Number(b.dataset.rating)<=rating));
+  app.querySelectorAll('[data-rating]').forEach(b=>b.onclick=()=>{rating=Number(b.dataset.rating);paint()});
+  app.querySelector('#feedbackBack').onclick=()=>profile();
+  app.querySelector('#feedbackSend').onclick=async()=>{
+    const message=app.querySelector('#feedbackMessage').value.trim(); const category=app.querySelector('#feedbackCategory').value; const status=app.querySelector('#feedbackStatus');
+    if(!rating){status.innerHTML='<div class="auth-message">Bitte gib eine Bewertung von 1 bis 5 Sternen ab.</div>';return}
+    if(!message){status.innerHTML='<div class="auth-message">Bitte schreibe noch kurz dein Feedback.</div>';return}
+    const btn=app.querySelector('#feedbackSend');btn.disabled=true;btn.textContent='Wird gesendet …';
+    try{const {error}=await KOLDIS_AUTH.client.from('koldis_feedback').insert({user_id:currentUser?.id||null,rating,category,message});if(error)throw error;trackEvent('feedback_submit',{rating,category});status.innerHTML='<div class="auth-message auth-success">Danke! Dein Feedback wurde gesendet. ❤️</div>';app.querySelector('#feedbackMessage').value='';}catch(e){status.innerHTML='<div class="auth-message">Feedback konnte nicht gesendet werden. Bitte später erneut versuchen.</div>';btn.disabled=false;btn.textContent='💬 Feedback senden';}};
+}
 function market(){shell(`<section class="panel"><div class="eyebrow">MARKT</div><h1>Wo kaufst du ein?</h1><p class="lead">Wähle deinen bevorzugten Markt. Ein echter Preisvergleich kann später angebunden werden.</p><div class="store-grid">${STORES.map(s=>`<button class="${state.store===s?'selected':''}" data-store="${s}">🛒 ${s}</button>`).join('')}</div><button class="secondary full" id="back">← Profil</button></section>`);app.querySelectorAll('[data-store]').forEach(b=>b.onclick=()=>{state.store=b.dataset.store;save();profile()});app.querySelector('#back').onclick=()=>profile()}
 function prefs(){shell(`<section class="panel"><div class="eyebrow">PERSÖNLICH</div><h1>Was passt zu dir?</h1><p class="lead">Mehrere Ziele und Vorlieben sind möglich. KOLDIS nutzt sie zur Sortierung und zum Ausschluss.</p><h2>Ziele</h2><div class="choice-grid">${['High Protein','Low Calorie','Günstig','Meal Prep','Gesünder essen','Schnell'].map(x=>`<button class="choice ${state.goals.includes(x)?'selected':''}" data-goal="${x}">${x}</button>`).join('')}</div><h2>Mag ich</h2><div class="tag-edit"><input id="likeInput" placeholder="z.B. Hähnchen"><button class="primary" id="addLike">Hinzufügen</button></div><div class="chips">${state.likes.map(x=>`<button data-like="${x}">❤️ ${x} ×</button>`).join('')}</div><h2>Mag ich nicht</h2><div class="tag-edit"><input id="disInput" placeholder="z.B. Pilze"><button class="primary" id="addDis">Hinzufügen</button></div><div class="chips">${state.dislikes.map(x=>`<button data-dis="${x}">❌ ${x} ×</button>`).join('')}</div><h2>Zubereitung</h2><div class="choice-grid">${['Egal','Pfanne','Ofen','Mikrowelle','Airfryer','Topf'].map(x=>`<button class="choice ${state.method===x?'selected':''}" data-method="${x}">${x}</button>`).join('')}</div><button class="secondary full" id="done">Fertig</button></section>`);app.querySelectorAll('[data-goal]').forEach(b=>b.onclick=()=>{const x=b.dataset.goal;state.goals=state.goals.includes(x)?state.goals.filter(y=>y!==x):[...state.goals,x];save();prefs()});app.querySelectorAll('[data-method]').forEach(b=>b.onclick=()=>{state.method=b.dataset.method;save();prefs()});app.querySelector('#addLike').onclick=()=>{const x=app.querySelector('#likeInput').value.trim();if(x&&!state.likes.includes(x))state.likes.push(x);save();prefs()};app.querySelector('#addDis').onclick=()=>{const x=app.querySelector('#disInput').value.trim();if(x&&!state.dislikes.includes(x))state.dislikes.push(x);save();prefs()};app.querySelectorAll('[data-like]').forEach(b=>b.onclick=()=>{state.likes=state.likes.filter(x=>x!==b.dataset.like);save();prefs()});app.querySelectorAll('[data-dis]').forEach(b=>b.onclick=()=>{state.dislikes=state.dislikes.filter(x=>x!==b.dataset.dis);save();prefs()});app.querySelector('#done').onclick=()=>profile()}
 function budgetPage(){shell(`<section class="panel"><div class="eyebrow">BUDGET</div><h1>Was möchtest du pro Woche ausgeben?</h1><div class="budget-big"><span id="bv">${state.budget}</span> €</div><input id="br" type="range" min="25" max="150" step="5" value="${state.budget}"><p class="lead">KOLDIS versucht bei der Wochenplanung innerhalb deines Budgets zu bleiben.</p><button class="primary full" id="done">Speichern</button></section>`);app.querySelector('#br').oninput=e=>app.querySelector('#bv').textContent=e.target.value;app.querySelector('#done').onclick=()=>{state.budget=+app.querySelector('#br').value;save();profile()}}
 function render(){try{if(!state.onboardingDone){onboarding();return}if(state.page==='home')home();else if(state.page==='recipes')recipesPage();else if(state.page==='plan')planPage();else if(state.page==='shopping')shopping();else if(state.page==='profile')profile();else home()}catch(err){console.error(err);app.innerHTML=`<div class="fatal"><h1>KOLDIS konnte nicht geladen werden.</h1><p>Ein interner Fehler wurde abgefangen. Bitte lade die Seite neu.</p><button onclick="location.reload()">Neu laden</button></div>`}}
 bootAuth();
+setTimeout(()=>trackEvent('app_open'),1500);
