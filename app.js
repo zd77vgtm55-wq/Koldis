@@ -415,6 +415,47 @@ function onboarding(){
 }
 function shellOnboarding(content){app.innerHTML=`<main>${content}</main>`}
 
+function shoppingIngredientGroups(entries){
+  const groups=new Map();
+  const normalizeName=name=>String(name).trim().toLowerCase()
+    .replace(/\s+/g,' ')
+    .replace(/^(eier?|ei)$/,'eier')
+    .replace(/^(wraps?)$/,'wraps')
+    .replace(/^(tortillas?)$/,'tortillas')
+    .replace(/^(stück|stk\.? )$/,'stk')
+    .replace(/^(kartoffeln?)$/,'kartoffeln');
+  const parse=item=>{
+    const s=String(item).trim();
+    let m=s.match(/^(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|el|tl|stk\.?|stück|eier?|ei|wraps?|tortillas?)?\s+(.+)$/i);
+    if(!m){
+      m=s.match(/^(\d+(?:[.,]\d+)?)\s+(.+)$/i);
+      if(m)return {qty:parseFloat(m[1].replace(',','.')),unit:'stk',name:m[2].trim()};
+      return {qty:null,unit:'',name:s};
+    }
+    let unit=(m[2]||'').toLowerCase();
+    const name=m[3].trim();
+    if(/^ei$|^eier?$/.test(unit))unit='eier';
+    else if(/^stk|^stück/.test(unit))unit='stk';
+    else if(/^wrap/.test(unit))unit='wraps';
+    else if(/^tortilla/.test(unit))unit='tortillas';
+    return {qty:parseFloat(m[1].replace(',','.')),unit,name};
+  };
+  const add=item=>{
+    const x=parse(item), key=normalizeName(x.name)+'|'+x.unit;
+    const existing=groups.get(key);
+    if(existing){
+      if(x.qty==null) existing.count++;
+      else existing.qty+=x.qty;
+    }else groups.set(key,{...x,count:1,key});
+  };
+  entries.forEach(entry=>{
+    const r=RECIPES.find(x=>x.id===Number(entry.id));
+    if(!r)return;
+    scaledIngredients(r,entry.portions).forEach(add);
+  });
+  return [...groups.values()].sort((a,b)=>normalizeName(a.name).localeCompare(normalizeName(b.name),'de'));
+}
+
 function shopping(){
   const entries=cartEntries().map(x=>({
     id:Number(x.id),
@@ -442,23 +483,26 @@ function shopping(){
     return;
   }
 
-  const rows=entries.map((entry,index)=>{
+  const groups=shoppingIngredientGroups(entries);
+  const items=groups.map((g,i)=>{
+    let qty='';
+    if(g.qty!=null){
+      const rounded=Math.round(g.qty*100)/100;
+      const formatted=formatQty(rounded);
+      qty=g.unit?`${formatted} ${g.unit}`:formatted;
+    }else qty=g.count>1?`${g.count}×`:'';
+    const label=`${qty}${qty?' ':''}${g.name}`;
+    return `<li class="shopping-item">
+      <label><input type="checkbox" data-shopping-check="${i}"><span>${esc(label)}</span></label>
+    </li>`;
+  }).join('');
+
+  const recipeRows=entries.map(entry=>{
     const r=RECIPES.find(x=>x.id===entry.id);
-    if(!r)return '';
-    const ingredients=scaledIngredients(r,entry.portions);
-    return `<article class="shopping-card">
-      <div class="shopping-card-head">
-        <div>
-          <div class="badge">REZEPT</div>
-          <h2>${r.e} ${esc(r.name)}</h2>
-          <p>${entry.portions} Portion${entry.portions===1?'':'en'} · ca. ${money(r.price*entry.portions)} €</p>
-        </div>
-        <button class="remove-shopping" data-remove-cart="${r.id}" aria-label="${esc(r.name)} entfernen">×</button>
-      </div>
-      <ul class="shopping-ingredients">
-        ${ingredients.map((ingredient,i)=>`<li><label><input type="checkbox" data-check="${index}-${i}"><span>${esc(ingredient)}</span></label></li>`).join('')}
-      </ul>
-    </article>`;
+    return `<div class="shopping-recipe-row">
+      <span>${r.e} ${esc(r.name)} <small>${entry.portions} Portion${entry.portions===1?'':'en'}</small></span>
+      <button class="remove-shopping" data-remove-cart="${r.id}" aria-label="${esc(r.name)} entfernen">×</button>
+    </div>`;
   }).join('');
 
   shell(`<section class="shopping-page">
@@ -466,11 +510,24 @@ function shopping(){
     <div class="shopping-head">
       <div>
         <h1>Deine Einkaufsliste</h1>
-        <p class="lead">${entries.length} Gericht${entries.length===1?'':'e'} · geschätzt ${money(total)} €</p>
+        <p class="lead">Alles zusammengefasst – doppelte Zutaten werden addiert.</p>
       </div>
       <button class="secondary" id="clearCart">🗑️ Liste leeren</button>
     </div>
-    <div class="shopping-list">${rows}</div>
+
+    <div class="shopping-card shopping-main-card">
+      <div class="shopping-card-head">
+        <div><div class="badge">GESAMTEINKAUF</div><h2>🛒 Zutaten</h2></div>
+        <strong>${groups.length} Position${groups.length===1?'':'en'}</strong>
+      </div>
+      <ul class="shopping-ingredients">${items}</ul>
+    </div>
+
+    <div class="shopping-card">
+      <div class="shopping-card-head"><div><div class="badge">DEINE GERICHTE</div><h2>Diese Gerichte sind enthalten</h2></div></div>
+      <div class="shopping-recipe-list">${recipeRows}</div>
+    </div>
+
     <div class="shopping-total">
       <div><small>GESCHÄTZT</small><strong>${money(total)} €</strong></div>
       <button class="primary" id="backPlan">📅 Zum Wochenplan</button>
