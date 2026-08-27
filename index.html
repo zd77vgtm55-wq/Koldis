@@ -2,44 +2,23 @@
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0d1117">
-
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07110c">
   <meta name="description" content="KOLDIS – Dein Essen. Dein Markt. Dein Budget.">
-
   <title>KOLDIS – Dein Essen. Dein Markt. Dein Budget.</title>
-
-  <link rel="stylesheet" href="style.css?v=0.9.0">
-
-  <!-- Supabase JavaScript -->
+  <link rel="stylesheet" href="style.css?v=0.9.1">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <script>
-    // ==========================================
-    // KOLDIS – SUPABASE VERBINDUNG
-    // ==========================================
-
-    const KOLDIS_SUPABASE_URL =
-      "https://fyiuokunfvxqjgyvbxoc.supabase.co";
-
-    const KOLDIS_SUPABASE_PUBLISHABLE_KEY =
-      "sb_publishable_E-mB0GYItOQ-Z6RWBX4Iyw_UhJULVAl";
-
-    // Supabase für KOLDIS initialisieren
+    const KOLDIS_SUPABASE_URL = "https://fyiuokunfvxqjgyvbxoc.supabase.co";
+    const KOLDIS_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_E-mB0GYItOQ-Z6RWBX4Iyw_UhJULVAl";
     window.koldisSupabase = window.supabase.createClient(
       KOLDIS_SUPABASE_URL,
       KOLDIS_SUPABASE_PUBLISHABLE_KEY
     );
   </script>
 </head>
-
 <body>
-
-  <!-- Hier wird die komplette KOLDIS-App geladen -->
   <div id="app"></div>
-
-  <!-- KOLDIS -->
-  <script src="app.js?v=0.9.0" defer></script>
-
+  <script src="app.js?v=0.9.1" defer></script>
 </body>
 </html>
