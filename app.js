@@ -24,22 +24,24 @@ function showAuth(message=''){
   app.innerHTML=`
     <main class="auth-page">
       <section class="auth-card">
-        <div class="onboarding-mark">🥗</div>
+        <div class="auth-logo">🥗</div>
         <div class="eyebrow">KOLDIS</div>
         <h1>Dein Essen.<br><em>Dein Plan.</em></h1>
-        <p class="lead">Melde dich an oder erstelle kostenlos dein KOLDIS-Konto.</p>
+        <p class="lead">Plane deine Woche, finde passende Gerichte und behalte dein Budget im Blick.</p>
         ${message ? `<div class="auth-message">${esc(message)}</div>` : ''}
         <div class="auth-tabs">
-          <button class="auth-tab active" id="showLogin">Anmelden</button>
-          <button class="auth-tab" id="showSignup">Konto erstellen</button>
+          <button class="auth-tab active" id="showLogin" type="button">Anmelden</button>
+          <button class="auth-tab" id="showSignup" type="button">Konto erstellen</button>
         </div>
         <form id="authForm" class="auth-form">
           <label>E-Mail<input id="authEmail" type="email" autocomplete="email" placeholder="deine@email.de" required></label>
           <label>Passwort<input id="authPassword" type="password" autocomplete="current-password" placeholder="Mindestens 6 Zeichen" minlength="6" required></label>
-          <button class="primary full" id="authSubmit" type="submit">Anmelden</button>
+          <button class="primary full auth-submit" id="authSubmit" type="submit">Anmelden</button>
         </form>
-        <button class="link auth-reset" id="forgotPassword">Passwort vergessen?</button>
-        <p class="onboarding-note">Deine Daten werden deinem KOLDIS-Konto zugeordnet.</p>
+        <button class="link auth-reset" id="forgotPassword" type="button">Passwort vergessen?</button>
+        <div class="auth-divider"><span>oder</span></div>
+        <button class="guest-button" id="continueGuest" type="button">Ohne Konto fortfahren <span>→</span></button>
+        <p class="onboarding-note">Ein Konto brauchst du nur, wenn deine Einstellungen geräteübergreifend gespeichert werden sollen.</p>
       </section>
     </main>`;
   let mode='login';
@@ -55,6 +57,14 @@ function showAuth(message=''){
   };
   loginTab.onclick=()=>setMode('login');
   signupTab.onclick=()=>setMode('signup');
+  app.querySelector('#continueGuest').onclick=()=>{
+    currentUser=null;
+    KOLDIS_AUTH.user=null;
+    state.page='home';
+    state.onboardingDone=true;
+    save();
+    render();
+  };
   form.onsubmit=async(e)=>{
     e.preventDefault();
     if(!authConfigured()){ showAuth('Supabase ist noch nicht verbunden. Bitte prüfe URL und Publishable Key in index.html.'); return; }
@@ -65,39 +75,26 @@ function showAuth(message=''){
     try{
       let result;
       if(mode==='signup'){
-        result=await KOLDIS_AUTH.client.auth.signUp({
-          email,password,
-          options:{emailRedirectTo:window.location.origin+window.location.pathname}
-        });
+        result=await KOLDIS_AUTH.client.auth.signUp({email,password,options:{emailRedirectTo:window.location.origin+window.location.pathname}});
         if(result.error) throw result.error;
-        if(result.data.session){
-          await finishLogin(result.data.user);
-        }else{
-          showAuth('Konto erstellt. Bitte bestätige zuerst deine E-Mail-Adresse. Danach kannst du dich anmelden.');
-        }
+        if(result.data.session){ await finishLogin(result.data.user); }
+        else showAuth('Konto erstellt. Bitte bestätige deine E-Mail-Adresse.');
       }else{
         result=await KOLDIS_AUTH.client.auth.signInWithPassword({email,password});
         if(result.error) throw result.error;
         await finishLogin(result.data.user);
       }
-    }catch(err){
-      console.error('KOLDIS Auth:',err);
-      showAuth(authError(err));
-    }finally{
-      submit.disabled=false;
-    }
+    }catch(err){ showAuth(authError(err)); }
   };
   app.querySelector('#forgotPassword').onclick=async()=>{
-    if(!authConfigured()){showAuth('Supabase ist noch nicht verbunden.');return}
     const email=app.querySelector('#authEmail').value.trim();
-    if(!email){showAuth('Bitte zuerst deine E-Mail-Adresse eingeben.');return}
+    if(!email){showAuth('Bitte zuerst deine E-Mail-Adresse eingeben.');return;}
+    if(!authConfigured()){showAuth('Supabase ist noch nicht verbunden.');return;}
     try{
-      const {error}=await KOLDIS_AUTH.client.auth.resetPasswordForEmail(email,{
-        redirectTo:window.location.origin+window.location.pathname
-      });
+      const {error}=await KOLDIS_AUTH.client.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin+window.location.pathname});
       if(error) throw error;
-      showAuth('Wenn die Adresse bei KOLDIS registriert ist, wurde eine E-Mail zum Zurücksetzen des Passworts verschickt.');
-    }catch(err){showAuth(authError(err))}
+      showAuth('Die E-Mail zum Zurücksetzen des Passworts wurde verschickt.');
+    }catch(err){showAuth(authError(err));}
   };
 }
 
