@@ -14,15 +14,29 @@
   .intro-copy p{font-size:13px}
 }
 
-
-/* KOLDIS 0.9.1 – responsive authentication screen */
-.auth-page{min-height:100svh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 0%,rgba(186,255,53,.08),transparent 42%),#0b0f13}
-.auth-card{width:min(100%,460px);background:rgba(18,25,32,.96);border:1px solid #293642;border-radius:28px;padding:34px;box-shadow:0 24px 80px rgba(0,0,0,.38)}
-.auth-logo{width:58px;height:58px;display:grid;place-items:center;border-radius:18px;background:#baff35;color:#0b0f13;font-size:30px;margin-bottom:18px}
-.auth-card h1{font-size:clamp(40px,9vw,58px);line-height:.96;letter-spacing:-.055em;margin:8px 0 14px}.auth-card h1 em{font-style:normal;color:#baff35}
-.auth-card .lead{font-size:15px;line-height:1.55;margin-bottom:24px}
-.auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:5px;background:#0d1319;border:1px solid #27333f;border-radius:15px;margin:0 0 18px}.auth-tab{border:0;background:transparent;color:#84919d;border-radius:11px;padding:12px;font-weight:850;cursor:pointer}.auth-tab.active{background:#f4f7f5;color:#0b0f13}
-.auth-form{display:grid;gap:14px}.auth-form label{display:grid;gap:7px;color:#b9c2c9;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}.auth-form input{width:100%;box-sizing:border-box;padding:15px 16px;border:1px solid #30404d;background:#0f161c;color:#f4f7f5;border-radius:14px;outline:none;font-size:16px}.auth-form input:focus{border-color:#baff35;box-shadow:0 0 0 3px rgba(186,255,53,.10)}.auth-submit{margin-top:2px;min-height:52px}
-.auth-reset{display:block;margin:13px auto 2px;color:#baff35;background:none;border:0;cursor:pointer;font-weight:800}.auth-divider{display:flex;align-items:center;gap:12px;color:#65727d;font-size:12px;margin:22px 0 14px}.auth-divider:before,.auth-divider:after{content:"";height:1px;background:#293642;flex:1}.guest-button{width:100%;display:flex;justify-content:space-between;align-items:center;padding:15px 17px;border:1px solid #3a4854;background:#151e26;color:#f4f7f5;border-radius:14px;font-weight:850;cursor:pointer}.guest-button:hover{border-color:#baff35}.guest-button span{color:#baff35;font-size:20px}.auth-message{margin:0 0 16px;padding:12px 14px;border-radius:12px;background:#202b34;border:1px solid #34434f;color:#dbe3e8;font-size:13px}.auth-card .onboarding-note{font-size:11px;line-height:1.5;text-align:center;margin:15px 0 0;color:#697681}
-@media(max-width:560px){.auth-page{padding:14px;align-items:end}.auth-card{padding:25px 20px 22px;border-radius:24px}.auth-logo{width:52px;height:52px;font-size:27px}.auth-card h1{font-size:42px}.auth-card .lead{font-size:14px}.auth-form input{padding:14px}.auth-tabs{margin-bottom:14px}}
-@media(min-width:900px){.auth-card{padding:40px}.auth-page{padding:40px}}
+/* KOLDIS 0.9.2 responsive polish */
+.auth-page{min-height:100dvh;display:grid;place-items:center;padding:28px 16px;background:radial-gradient(circle at 50% 0%,#17231b 0,#0b0f13 55%);max-width:none!important}
+.auth-card{width:min(100%,520px);background:rgba(18,25,32,.96);border:1px solid #30404d;border-radius:28px;padding:32px;box-shadow:0 28px 90px rgba(0,0,0,.38)}
+.auth-card h1{font-size:clamp(40px,8vw,62px);line-height:.96;letter-spacing:-.055em;margin:10px 0}
+.auth-card h1 em{font-style:normal;color:#baff35}
+.onboarding-mark{width:58px;height:58px;display:grid;place-items:center;border-radius:18px;background:#25313d;font-size:30px;margin-bottom:16px}
+.auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:22px 0 14px}
+.auth-tab{border:1px solid #30404d;background:#11181f;color:#9eabb6;border-radius:13px;padding:12px;font-weight:850}
+.auth-tab.active{background:#f4f7f5;color:#0b0f13;border-color:#f4f7f5}
+.auth-form{display:grid;gap:12px}
+.auth-form label{display:grid;gap:7px;color:#cdd5da;font-size:12px;font-weight:800}
+.auth-form input{width:100%;border:1px solid #30404d;background:#0d141a;color:#f4f7f5;border-radius:13px;padding:14px;outline:none}
+.auth-form input:focus{border-color:#baff35;box-shadow:0 0 0 3px rgba(186,255,53,.1)}
+.auth-reset{display:block;margin:14px auto 4px}
+.guest-link{display:block;width:100%;margin-top:10px;border:1px solid #34414e;background:#151e26;color:#f4f7f5;border-radius:14px;padding:13px;font-weight:850}
+.guest-link:hover{border-color:#baff35}
+.auth-message{border:1px solid #6b4545;background:#25191b;color:#ffd8d8;border-radius:13px;padding:11px;font-size:12px;line-height:1.45;margin:12px 0}
+.onboarding-note{text-align:center;color:#71808c;font-size:11px;margin:14px 0 0}
+.intro-visual{width:100%;max-width:520px;height:auto;aspect-ratio:auto;object-fit:contain;object-position:center;border-radius:18px}
+@media(min-width:800px){.intro-card{grid-template-columns:minmax(0,1fr) minmax(300px,460px);padding:24px}.intro-visual{max-height:520px}}
+@media(max-width:620px){
+  .auth-page{padding:18px 12px}
+  .auth-card{padding:24px 18px;border-radius:23px}
+  .intro-card{grid-template-columns:1fr;padding:17px}
+  .intro-visual{max-width:100%;width:100%;height:auto;margin:0 auto}
+}

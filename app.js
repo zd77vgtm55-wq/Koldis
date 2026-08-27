@@ -24,24 +24,23 @@ function showAuth(message=''){
   app.innerHTML=`
     <main class="auth-page">
       <section class="auth-card">
-        <div class="auth-logo">🥗</div>
+        <div class="onboarding-mark">🥗</div>
         <div class="eyebrow">KOLDIS</div>
         <h1>Dein Essen.<br><em>Dein Plan.</em></h1>
-        <p class="lead">Plane deine Woche, finde passende Gerichte und behalte dein Budget im Blick.</p>
+        <p class="lead">Melde dich an oder erstelle kostenlos dein KOLDIS-Konto.</p>
         ${message ? `<div class="auth-message">${esc(message)}</div>` : ''}
         <div class="auth-tabs">
-          <button class="auth-tab active" id="showLogin" type="button">Anmelden</button>
-          <button class="auth-tab" id="showSignup" type="button">Konto erstellen</button>
+          <button class="auth-tab active" id="showLogin">Anmelden</button>
+          <button class="auth-tab" id="showSignup">Konto erstellen</button>
         </div>
         <form id="authForm" class="auth-form">
           <label>E-Mail<input id="authEmail" type="email" autocomplete="email" placeholder="deine@email.de" required></label>
           <label>Passwort<input id="authPassword" type="password" autocomplete="current-password" placeholder="Mindestens 6 Zeichen" minlength="6" required></label>
-          <button class="primary full auth-submit" id="authSubmit" type="submit">Anmelden</button>
+          <button class="primary full" id="authSubmit" type="submit">Anmelden</button>
         </form>
-        <button class="link auth-reset" id="forgotPassword" type="button">Passwort vergessen?</button>
-        <div class="auth-divider"><span>oder</span></div>
-        <button class="guest-button" id="continueGuest" type="button">Ohne Konto fortfahren <span>→</span></button>
-        <p class="onboarding-note">Ein Konto brauchst du nur, wenn deine Einstellungen geräteübergreifend gespeichert werden sollen.</p>
+        <button class="link auth-reset" id="forgotPassword">Passwort vergessen?</button>
+        <button class="guest-link" id="continueGuest" type="button">Ohne Konto fortfahren →</button>
+        <p class="onboarding-note">Mit Konto werden deine Daten gespeichert und synchronisiert.</p>
       </section>
     </main>`;
   let mode='login';
@@ -57,14 +56,6 @@ function showAuth(message=''){
   };
   loginTab.onclick=()=>setMode('login');
   signupTab.onclick=()=>setMode('signup');
-  app.querySelector('#continueGuest').onclick=()=>{
-    currentUser=null;
-    KOLDIS_AUTH.user=null;
-    state.page='home';
-    state.onboardingDone=true;
-    save();
-    render();
-  };
   form.onsubmit=async(e)=>{
     e.preventDefault();
     if(!authConfigured()){ showAuth('Supabase ist noch nicht verbunden. Bitte prüfe URL und Publishable Key in index.html.'); return; }
@@ -75,26 +66,47 @@ function showAuth(message=''){
     try{
       let result;
       if(mode==='signup'){
-        result=await KOLDIS_AUTH.client.auth.signUp({email,password,options:{emailRedirectTo:window.location.origin+window.location.pathname}});
+        result=await KOLDIS_AUTH.client.auth.signUp({
+          email,password,
+          options:{emailRedirectTo:window.location.origin+window.location.pathname}
+        });
         if(result.error) throw result.error;
-        if(result.data.session){ await finishLogin(result.data.user); }
-        else showAuth('Konto erstellt. Bitte bestätige deine E-Mail-Adresse.');
+        if(result.data.session){
+          await finishLogin(result.data.user);
+        }else{
+          showAuth('Konto erstellt. Bitte bestätige zuerst deine E-Mail-Adresse. Danach kannst du dich anmelden.');
+        }
       }else{
         result=await KOLDIS_AUTH.client.auth.signInWithPassword({email,password});
         if(result.error) throw result.error;
         await finishLogin(result.data.user);
       }
-    }catch(err){ showAuth(authError(err)); }
+    }catch(err){
+      console.error('KOLDIS Auth:',err);
+      showAuth(authError(err));
+    }finally{
+      submit.disabled=false;
+    }
   };
   app.querySelector('#forgotPassword').onclick=async()=>{
+    if(!authConfigured()){showAuth('Supabase ist noch nicht verbunden.');return}
     const email=app.querySelector('#authEmail').value.trim();
-    if(!email){showAuth('Bitte zuerst deine E-Mail-Adresse eingeben.');return;}
-    if(!authConfigured()){showAuth('Supabase ist noch nicht verbunden.');return;}
+    if(!email){showAuth('Bitte zuerst deine E-Mail-Adresse eingeben.');return}
     try{
-      const {error}=await KOLDIS_AUTH.client.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin+window.location.pathname});
+      const {error}=await KOLDIS_AUTH.client.auth.resetPasswordForEmail(email,{
+        redirectTo:window.location.origin+window.location.pathname
+      });
       if(error) throw error;
-      showAuth('Die E-Mail zum Zurücksetzen des Passworts wurde verschickt.');
-    }catch(err){showAuth(authError(err));}
+      showAuth('Wenn die Adresse bei KOLDIS registriert ist, wurde eine E-Mail zum Zurücksetzen des Passworts verschickt.');
+    }catch(err){showAuth(authError(err))}
+  };
+  app.querySelector('#continueGuest').onclick=()=>{
+    currentUser=null;
+    KOLDIS_AUTH.user=null;
+    state.onboardingDone=true;
+    state.page='home';
+    saveLocalOnly();
+    render();
   };
 }
 
@@ -180,7 +192,8 @@ async function logoutKoldis(){
 
 async function bootAuth(){
   if(!authConfigured()){
-    showAuth('Supabase ist noch nicht verbunden. Prüfe bitte die Project URL und den Publishable Key in index.html.');
+    // The app remains usable as a guest if Supabase is unavailable.
+    showAuth('Anmeldung ist gerade nicht verfügbar. Du kannst KOLDIS trotzdem ohne Konto nutzen.');
     return;
   }
   const {data,error}=await KOLDIS_AUTH.client.auth.getSession();
@@ -205,7 +218,7 @@ const RECIPES=[{"id":1,"e":"🍗","name":"Chicken-Reis-Pfanne","kcal":620,"p":52
 const DAYS=['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'];
 const FILTERS=['Alle','High Protein','Günstig','Schnell','Meal Prep','Low Calorie','Gesünder essen'];
 const STORES=['ALDI','LIDL','COMBI','EDEKA','REWE','PENNY','Netto'];
-const KEY='koldis-0.9.0-local-v1';
+const KEY='koldis-0.9.2-local-v1';
 const defaults={page:'home',budget:60,store:'',goals:['High Protein'],likes:[],dislikes:[],intolerances:[],method:'Egal',plan:{},plans:[{id:'w1',label:'Woche 1',plan:{}}],currentPlan:0,cart:[],saved:[],filter:'Alle',query:'',theme:'dark',portionDefault:4,onboardingDone:false};
 function load(){
   try{
