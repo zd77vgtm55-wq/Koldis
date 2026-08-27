@@ -414,6 +414,90 @@ function onboarding(){
   app.querySelector('#obFinish').onclick=()=>{if(!state.store){alert('Bitte wähle noch deinen Markt aus.');return}if(!state.goals.length){alert('Bitte wähle mindestens ein Ziel aus.');return}state.onboardingDone=true;state.page='home';save();syncProfile();render()};
 }
 function shellOnboarding(content){app.innerHTML=`<main>${content}</main>`}
+
+function shopping(){
+  const entries=cartEntries().map(x=>({
+    id:Number(x.id),
+    portions:Math.max(1,Math.min(12,Number(x.portions)||state.portionDefault||4))
+  })).filter(x=>RECIPES.some(r=>r.id===x.id));
+
+  const total=entries.reduce((sum,x)=>{
+    const r=RECIPES.find(r=>r.id===x.id);
+    return sum+(r?.price||0)*x.portions;
+  },0);
+
+  if(!entries.length){
+    shell(`<section class="shopping-page">
+      <div class="eyebrow">EINKAUF</div>
+      <h1>Deine Einkaufsliste</h1>
+      <p class="lead">Noch nichts auf deiner Einkaufsliste.</p>
+      <div class="empty shopping-empty">
+        <div style="font-size:3rem">🛒</div>
+        <h2>Liste ist noch leer</h2>
+        <p>Plane zuerst Gerichte oder füge ein Rezept direkt zum Einkauf hinzu.</p>
+        <button class="primary" id="goRecipes">🍽️ Gerichte entdecken</button>
+      </div>
+    </section>`);
+    app.querySelector('#goRecipes').onclick=()=>nav('recipes');
+    return;
+  }
+
+  const rows=entries.map((entry,index)=>{
+    const r=RECIPES.find(x=>x.id===entry.id);
+    if(!r)return '';
+    const ingredients=scaledIngredients(r,entry.portions);
+    return `<article class="shopping-card">
+      <div class="shopping-card-head">
+        <div>
+          <div class="badge">REZEPT</div>
+          <h2>${r.e} ${esc(r.name)}</h2>
+          <p>${entry.portions} Portion${entry.portions===1?'':'en'} · ca. ${money(r.price*entry.portions)} €</p>
+        </div>
+        <button class="remove-shopping" data-remove-cart="${r.id}" aria-label="${esc(r.name)} entfernen">×</button>
+      </div>
+      <ul class="shopping-ingredients">
+        ${ingredients.map((ingredient,i)=>`<li><label><input type="checkbox" data-check="${index}-${i}"><span>${esc(ingredient)}</span></label></li>`).join('')}
+      </ul>
+    </article>`;
+  }).join('');
+
+  shell(`<section class="shopping-page">
+    <div class="eyebrow">EINKAUF</div>
+    <div class="shopping-head">
+      <div>
+        <h1>Deine Einkaufsliste</h1>
+        <p class="lead">${entries.length} Gericht${entries.length===1?'':'e'} · geschätzt ${money(total)} €</p>
+      </div>
+      <button class="secondary" id="clearCart">🗑️ Liste leeren</button>
+    </div>
+    <div class="shopping-list">${rows}</div>
+    <div class="shopping-total">
+      <div><small>GESCHÄTZT</small><strong>${money(total)} €</strong></div>
+      <button class="primary" id="backPlan">📅 Zum Wochenplan</button>
+    </div>
+  </section>`);
+
+  app.querySelectorAll('[data-remove-cart]').forEach(btn=>{
+    btn.onclick=()=>{
+      const id=Number(btn.dataset.removeCart);
+      state.cart=cartEntries().filter(x=>Number(x.id)!==id);
+      save();
+      render();
+    };
+  });
+
+  app.querySelector('#clearCart').onclick=()=>{
+    if(!state.cart.length)return;
+    if(confirm('Möchtest du die komplette Einkaufsliste leeren?')){
+      state.cart=[];
+      save();
+      render();
+    }
+  };
+
+  app.querySelector('#backPlan').onclick=()=>nav('plan');
+}
+
 function profile(){shell(`<section class="profile"><div class="eyebrow">PROFIL</div><h1>Dein KOLDIS-Profil</h1><p class="lead">Deine Einrichtung bleibt gespeichert. Ändere sie jederzeit, wenn sich deine Vorlieben, dein Budget oder dein Alltag ändern.</p><div class="profile-account"><small>KONTO</small><strong>${esc(currentUser?.email||'Angemeldet')}</strong><button class="secondary full" id="logout">🚪 Abmelden</button></div><div class="profile-grid"><div><small>WÖCHENTLICHES BUDGET</small><strong>${money(state.budget)} €</strong></div><div><small>MARKT</small><strong>${state.store||'Nicht gewählt'}</strong></div><div><small>ZIELE</small><strong>${state.goals.join(', ')||'Keine'}</strong></div><div><small>ZUBEREITUNG</small><strong>${state.method}</strong></div><div><small>STANDARDMENGE</small><strong>${state.portionDefault||4} Portionen</strong></div></div><button class="secondary full" id="market">🛒 Markt ändern</button><button class="secondary full" id="prefs">⚙️ Vorlieben & Ziele ändern</button><button class="secondary full" id="budget">💶 Budget ändern</button></section>`);app.querySelector('#market').onclick=()=>market();app.querySelector('#prefs').onclick=()=>prefs();app.querySelector('#budget').onclick=()=>budgetPage();app.querySelector('#logout').onclick=logoutKoldis}
 
 function market(){shell(`<section class="panel"><div class="eyebrow">MARKT</div><h1>Wo kaufst du ein?</h1><p class="lead">Wähle deinen bevorzugten Markt. Ein echter Preisvergleich kann später angebunden werden.</p><div class="store-grid">${STORES.map(s=>`<button class="${state.store===s?'selected':''}" data-store="${s}">🛒 ${s}</button>`).join('')}</div><button class="secondary full" id="back">← Profil</button></section>`);app.querySelectorAll('[data-store]').forEach(b=>b.onclick=()=>{state.store=b.dataset.store;save();profile()});app.querySelector('#back').onclick=()=>profile()}
