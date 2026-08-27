@@ -13,6 +13,7 @@ const KOLDIS_AUTH = {
 
 let currentUser = null;
 let authMode = 'none'; // 'user' | 'guest' | 'none'
+let passwordRecoveryMode = false;
 let lastActivityWrite = 0;
 const AUTH_ACTIVITY_KEY = 'koldis-auth-activity-v1';
 const AUTH_REMEMBER_KEY = 'koldis-auth-remember-v1';
@@ -74,6 +75,78 @@ function hasValidGuestSession(){
 function authConfigured(){
   return !!(KOLDIS_AUTH.client &&
     typeof KOLDIS_AUTH.client.auth?.getSession === 'function');
+}
+
+function isPasswordRecoveryUrl(){
+  try{
+    const hash=new URLSearchParams((window.location.hash||'').replace(/^#/,''));
+    const query=new URLSearchParams(window.location.search||'');
+    return hash.get('type')==='recovery' || query.get('type')==='recovery';
+  }catch{return false}
+}
+
+function clearPasswordRecoveryUrl(){
+  try{
+    const clean=window.location.origin+window.location.pathname+(window.location.search||'');
+    window.history.replaceState({},document.title,clean);
+  }catch{}
+}
+
+function showPasswordReset(message=''){
+  const app=document.getElementById('app');
+  if(!app) return;
+  passwordRecoveryMode=true;
+  app.innerHTML=`
+    <main class="auth-page">
+      <section class="auth-card">
+        <div class="onboarding-mark">🔐</div>
+        <div class="eyebrow">KOLDIS</div>
+        <h1>Neues<br><em>Passwort.</em></h1>
+        <p class="lead">Lege jetzt ein neues Passwort für dein KOLDIS-Konto fest.</p>
+        ${message ? `<div class="auth-message ${message.startsWith('Passwort erfolgreich')?'auth-success':''}">${esc(message)}</div>` : ''}
+        <form id="resetForm" class="auth-form">
+          <label>Neues Passwort<input id="newPassword" type="password" autocomplete="new-password" placeholder="Mindestens 6 Zeichen" minlength="6" required></label>
+          <label>Passwort wiederholen<input id="newPasswordConfirm" type="password" autocomplete="new-password" placeholder="Passwort erneut eingeben" minlength="6" required></label>
+          <button class="primary full" id="resetSubmit" type="submit">Passwort ändern</button>
+        </form>
+        <button class="secondary full" id="resetBack" type="button">← Zur Anmeldung</button>
+        <p class="onboarding-note">Dein neues Passwort wird sicher bei KOLDIS gespeichert.</p>
+      </section>
+    </main>`;
+
+  const form=app.querySelector('#resetForm');
+  const submit=app.querySelector('#resetSubmit');
+  form.onsubmit=async(e)=>{
+    e.preventDefault();
+    if(!authConfigured()){showPasswordReset('Supabase ist noch nicht verbunden.');return}
+    const password=app.querySelector('#newPassword').value;
+    const confirm=app.querySelector('#newPasswordConfirm').value;
+    if(password.length<6){showPasswordReset('Das Passwort muss mindestens 6 Zeichen haben.');return}
+    if(password!==confirm){showPasswordReset('Die Passwörter stimmen nicht überein.');return}
+    submit.disabled=true;
+    submit.textContent='Wird gespeichert …';
+    try{
+      const {data,error}=await KOLDIS_AUTH.client.auth.updateUser({password});
+      if(error) throw error;
+      passwordRecoveryMode=false;
+      currentUser=data?.user||currentUser;
+      KOLDIS_AUTH.user=currentUser;
+      clearPasswordRecoveryUrl();
+      await loadCloudProfile(currentUser);
+      state.page='home';
+      if(!state.onboardingDone) onboarding(); else render();
+    }catch(err){
+      console.error('KOLDIS Passwort-Reset:',err);
+      submit.disabled=false;
+      submit.textContent='Passwort ändern';
+      showPasswordReset(authError(err));
+    }
+  };
+  app.querySelector('#resetBack').onclick=()=>{
+    passwordRecoveryMode=false;
+    clearPasswordRecoveryUrl();
+    showAuth();
+  };
 }
 
 function showAuth(message=''){
@@ -272,11 +345,22 @@ async function bootAuth(){
     return;
   }
 
+  const recoveryRequested=isPasswordRecoveryUrl();
   const {data,error}=await KOLDIS_AUTH.client.auth.getSession();
   if(error){console.error(error);showAuth('Die Anmeldung konnte nicht geladen werden.');return;}
 
   currentUser=data?.session?.user||null;
   KOLDIS_AUTH.user=currentUser;
+
+  if(recoveryRequested){
+    if(currentUser){
+      authMode='user';
+      KOLDIS_AUTH.ready=true;
+      showPasswordReset();
+    }else{
+      showPasswordReset('Der Passwort-Link ist abgelaufen oder nicht mehr gültig. Bitte fordere einen neuen Link an.');
+    }
+  }
 
   // Nicht dauerhaft angemeldet: nach 60 Minuten ohne Aktivität ausloggen.
   if(currentUser && !getRememberChoice() && authWasIdleTooLong()){
@@ -294,8 +378,10 @@ async function bootAuth(){
     markAuthActivity(true);
     await loadCloudProfile(currentUser);
     KOLDIS_AUTH.ready=true;
-    if(!state.onboardingDone) onboarding(); else render();
-  }else if(hasValidGuestSession()){
+    if(!recoveryRequested){
+      if(!state.onboardingDone) onboarding(); else render();
+    }
+  }else if(hasValidGuestSession() && !recoveryRequested){
     authMode='guest';
     state.onboardingDone=true;
     markAuthActivity(true);
@@ -304,10 +390,26 @@ async function bootAuth(){
   }else{
     authMode='none';
     KOLDIS_AUTH.ready=true;
-    showAuth();
+    if(!recoveryRequested) showAuth();
   }
 
   KOLDIS_AUTH.client.auth.onAuthStateChange(async(event,session)=>{
+    if(event==='PASSWORD_RECOVERY'){
+      currentUser=session?.user||currentUser;
+      KOLDIS_AUTH.user=currentUser;
+      authMode='user';
+      KOLDIS_AUTH.ready=true;
+      showPasswordReset();
+      return;
+    }
+    if(passwordRecoveryMode && event==='SIGNED_IN' && session?.user){
+      currentUser=session.user;
+      KOLDIS_AUTH.user=currentUser;
+      authMode='user';
+      KOLDIS_AUTH.ready=true;
+      showPasswordReset();
+      return;
+    }
     if(event==='SIGNED_IN' && session?.user){
       currentUser=session.user;
       KOLDIS_AUTH.user=currentUser;
