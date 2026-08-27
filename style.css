@@ -40,3 +40,7 @@
   .intro-card{grid-template-columns:1fr;padding:17px}
   .intro-visual{max-width:100%;width:100%;height:auto;margin:0 auto}
 }
+
+
+/* 0.9.3 auth/profile polish */
+.remember-row{display:flex!important;flex-direction:row!important;align-items:center;gap:10px;font-size:.95rem;cursor:pointer;margin:4px 0 12px}.remember-row input{width:18px!important;height:18px!important;flex:0 0 auto}.remember-row span{opacity:.9}.profile-account .account-sub{display:block;color:#9aa8b5;margin:6px 0 14px;line-height:1.45}.profile-account{display:flex;flex-direction:column;gap:10px}

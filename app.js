@@ -12,6 +12,64 @@ const KOLDIS_AUTH = {
 };
 
 let currentUser = null;
+let authMode = 'none'; // 'user' | 'guest' | 'none'
+let lastActivityWrite = 0;
+const AUTH_ACTIVITY_KEY = 'koldis-auth-activity-v1';
+const AUTH_REMEMBER_KEY = 'koldis-auth-remember-v1';
+const GUEST_SESSION_KEY = 'koldis-guest-session-v1';
+const AUTH_IDLE_MS = 60 * 60 * 1000;
+
+function getRememberChoice(){
+  try { return localStorage.getItem(AUTH_REMEMBER_KEY) !== '0'; } catch { return true; }
+}
+function setRememberChoice(value){
+  try { localStorage.setItem(AUTH_REMEMBER_KEY, value ? '1' : '0'); } catch {}
+}
+function markAuthActivity(force=false){
+  if(!currentUser && authMode!=='guest') return;
+  const now=Date.now();
+  if(!force && now-lastActivityWrite<15000) return;
+  lastActivityWrite=now;
+  try {
+    localStorage.setItem(AUTH_ACTIVITY_KEY, String(now));
+    if(authMode==='guest') localStorage.setItem(GUEST_SESSION_KEY, String(now));
+  } catch {}
+}
+function authWasIdleTooLong(){
+  try {
+    const raw=localStorage.getItem(AUTH_ACTIVITY_KEY);
+    const last=Number(raw||0);
+    return last>0 && Date.now()-last>AUTH_IDLE_MS;
+  } catch { return false; }
+}
+function clearGuestSession(){
+  try { localStorage.removeItem(GUEST_SESSION_KEY); } catch {}
+}
+function startGuestSession(){
+  currentUser=null;
+  KOLDIS_AUTH.user=null;
+  authMode='guest';
+  state.onboardingDone=true;
+  state.page='home';
+  try {
+    const now=Date.now();
+    localStorage.setItem(AUTH_ACTIVITY_KEY,String(now));
+    localStorage.setItem(GUEST_SESSION_KEY,String(now));
+  } catch {}
+  saveLocalOnly();
+  render();
+}
+function hasValidGuestSession(){
+  try {
+    const last=Number(localStorage.getItem(GUEST_SESSION_KEY)||0);
+    if(!last || Date.now()-last>AUTH_IDLE_MS) return false;
+    return true;
+  } catch { return false; }
+}
+
+['click','touchstart','keydown','scroll'].forEach(evt=>{
+  window.addEventListener(evt,()=>markAuthActivity(),{passive:true});
+});
 
 function authConfigured(){
   return !!(KOLDIS_AUTH.client &&
@@ -36,6 +94,7 @@ function showAuth(message=''){
         <form id="authForm" class="auth-form">
           <label>E-Mail<input id="authEmail" type="email" autocomplete="email" placeholder="deine@email.de" required></label>
           <label>Passwort<input id="authPassword" type="password" autocomplete="current-password" placeholder="Mindestens 6 Zeichen" minlength="6" required></label>
+          <label class="remember-row"><input id="rememberMe" type="checkbox" ${getRememberChoice()?'checked':''}> <span>Angemeldet bleiben</span></label>
           <button class="primary full" id="authSubmit" type="submit">Anmelden</button>
         </form>
         <button class="link auth-reset" id="forgotPassword">Passwort vergessen?</button>
@@ -61,6 +120,7 @@ function showAuth(message=''){
     if(!authConfigured()){ showAuth('Supabase ist noch nicht verbunden. Bitte prüfe URL und Publishable Key in index.html.'); return; }
     const email=app.querySelector('#authEmail').value.trim();
     const password=app.querySelector('#authPassword').value;
+    setRememberChoice(!!app.querySelector('#rememberMe')?.checked);
     submit.disabled=true;
     submit.textContent='Bitte warten …';
     try{
@@ -100,14 +160,7 @@ function showAuth(message=''){
       showAuth('Wenn die Adresse bei KOLDIS registriert ist, wurde eine E-Mail zum Zurücksetzen des Passworts verschickt.');
     }catch(err){showAuth(authError(err))}
   };
-  app.querySelector('#continueGuest').onclick=()=>{
-    currentUser=null;
-    KOLDIS_AUTH.user=null;
-    state.onboardingDone=true;
-    state.page='home';
-    saveLocalOnly();
-    render();
-  };
+  app.querySelector('#continueGuest').onclick=()=>startGuestSession();
 }
 
 function authError(err){
@@ -176,40 +229,101 @@ async function syncProfile(){
 async function finishLogin(user){
   currentUser=user||null;
   KOLDIS_AUTH.user=currentUser;
+  authMode='user';
+  clearGuestSession();
+  markAuthActivity(true);
   await loadCloudProfile(currentUser);
   state.page='home';
   if(!state.onboardingDone) onboarding(); else render();
 }
 
 async function logoutKoldis(){
+  if(authMode==='guest') {
+    currentUser=null;
+    KOLDIS_AUTH.user=null;
+    authMode='none';
+    clearGuestSession();
+    try { localStorage.removeItem(AUTH_ACTIVITY_KEY); } catch {}
+    showAuth('Du nutzt KOLDIS jetzt als Gast.');
+    return;
+  }
   if(!authConfigured()) return;
   const {error}=await KOLDIS_AUTH.client.auth.signOut();
   if(error) console.warn(error);
   currentUser=null;
   KOLDIS_AUTH.user=null;
+  authMode='none';
+  try { localStorage.removeItem(AUTH_ACTIVITY_KEY); } catch {}
+  clearGuestSession();
   showAuth('Du wurdest abgemeldet.');
 }
 
 async function bootAuth(){
   if(!authConfigured()){
-    // The app remains usable as a guest if Supabase is unavailable.
-    showAuth('Anmeldung ist gerade nicht verfügbar. Du kannst KOLDIS trotzdem ohne Konto nutzen.');
+    if(hasValidGuestSession()){
+      authMode='guest';
+      state.onboardingDone=true;
+      state.page=state.page||'home';
+      markAuthActivity(true);
+      render();
+    }else{
+      showAuth('Anmeldung ist gerade nicht verfügbar. Du kannst KOLDIS trotzdem ohne Konto nutzen.');
+    }
     return;
   }
+
   const {data,error}=await KOLDIS_AUTH.client.auth.getSession();
   if(error){console.error(error);showAuth('Die Anmeldung konnte nicht geladen werden.');return;}
+
   currentUser=data?.session?.user||null;
   KOLDIS_AUTH.user=currentUser;
-  if(currentUser) await loadCloudProfile(currentUser);
-  KOLDIS_AUTH.ready=true;
+
+  // Nicht dauerhaft angemeldet: nach 60 Minuten ohne Aktivität ausloggen.
+  if(currentUser && !getRememberChoice() && authWasIdleTooLong()){
+    try { await KOLDIS_AUTH.client.auth.signOut(); } catch(e) { console.warn(e); }
+    currentUser=null;
+    KOLDIS_AUTH.user=null;
+    authMode='none';
+    try { localStorage.removeItem(AUTH_ACTIVITY_KEY); } catch {}
+    showAuth('Deine Anmeldung ist wegen Inaktivität abgelaufen.');
+    return;
+  }
+
   if(currentUser){
+    authMode='user';
+    markAuthActivity(true);
+    await loadCloudProfile(currentUser);
+    KOLDIS_AUTH.ready=true;
     if(!state.onboardingDone) onboarding(); else render();
+  }else if(hasValidGuestSession()){
+    authMode='guest';
+    state.onboardingDone=true;
+    markAuthActivity(true);
+    KOLDIS_AUTH.ready=true;
+    render();
   }else{
+    authMode='none';
+    KOLDIS_AUTH.ready=true;
     showAuth();
   }
+
   KOLDIS_AUTH.client.auth.onAuthStateChange(async(event,session)=>{
+    if(event==='SIGNED_IN' && session?.user){
+      currentUser=session.user;
+      KOLDIS_AUTH.user=currentUser;
+      authMode='user';
+      clearGuestSession();
+      markAuthActivity(true);
+      await loadCloudProfile(currentUser);
+      if(!state.onboardingDone) onboarding(); else render();
+    }
     if(event==='SIGNED_OUT'){
-      currentUser=null; KOLDIS_AUTH.user=null; showAuth();
+      currentUser=null;
+      KOLDIS_AUTH.user=null;
+      authMode='none';
+      try { localStorage.removeItem(AUTH_ACTIVITY_KEY); } catch {}
+      clearGuestSession();
+      showAuth();
     }
   });
 }
@@ -415,47 +529,6 @@ function onboarding(){
 }
 function shellOnboarding(content){app.innerHTML=`<main>${content}</main>`}
 
-function shoppingIngredientGroups(entries){
-  const groups=new Map();
-  const normalizeName=name=>String(name).trim().toLowerCase()
-    .replace(/\s+/g,' ')
-    .replace(/^(eier?|ei)$/,'eier')
-    .replace(/^(wraps?)$/,'wraps')
-    .replace(/^(tortillas?)$/,'tortillas')
-    .replace(/^(stück|stk\.? )$/,'stk')
-    .replace(/^(kartoffeln?)$/,'kartoffeln');
-  const parse=item=>{
-    const s=String(item).trim();
-    let m=s.match(/^(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|el|tl|stk\.?|stück|eier?|ei|wraps?|tortillas?)?\s+(.+)$/i);
-    if(!m){
-      m=s.match(/^(\d+(?:[.,]\d+)?)\s+(.+)$/i);
-      if(m)return {qty:parseFloat(m[1].replace(',','.')),unit:'stk',name:m[2].trim()};
-      return {qty:null,unit:'',name:s};
-    }
-    let unit=(m[2]||'').toLowerCase();
-    const name=m[3].trim();
-    if(/^ei$|^eier?$/.test(unit))unit='eier';
-    else if(/^stk|^stück/.test(unit))unit='stk';
-    else if(/^wrap/.test(unit))unit='wraps';
-    else if(/^tortilla/.test(unit))unit='tortillas';
-    return {qty:parseFloat(m[1].replace(',','.')),unit,name};
-  };
-  const add=item=>{
-    const x=parse(item), key=normalizeName(x.name)+'|'+x.unit;
-    const existing=groups.get(key);
-    if(existing){
-      if(x.qty==null) existing.count++;
-      else existing.qty+=x.qty;
-    }else groups.set(key,{...x,count:1,key});
-  };
-  entries.forEach(entry=>{
-    const r=RECIPES.find(x=>x.id===Number(entry.id));
-    if(!r)return;
-    scaledIngredients(r,entry.portions).forEach(add);
-  });
-  return [...groups.values()].sort((a,b)=>normalizeName(a.name).localeCompare(normalizeName(b.name),'de'));
-}
-
 function shopping(){
   const entries=cartEntries().map(x=>({
     id:Number(x.id),
@@ -483,49 +556,79 @@ function shopping(){
     return;
   }
 
-  const groups=shoppingIngredientGroups(entries);
-  const items=groups.map((g,i)=>{
-    let qty='';
-    if(g.qty!=null){
-      const rounded=Math.round(g.qty*100)/100;
-      const formatted=formatQty(rounded);
-      qty=g.unit?`${formatted} ${g.unit}`:formatted;
-    }else qty=g.count>1?`${g.count}×`:'';
-    const label=`${qty}${qty?' ':''}${g.name}`;
-    return `<li class="shopping-item">
-      <label><input type="checkbox" data-shopping-check="${i}"><span>${esc(label)}</span></label>
-    </li>`;
-  }).join('');
+  // Zentrale Einkaufsliste: gleiche Zutaten werden zusammengezählt.
+  const grouped=new Map();
 
-  const recipeRows=entries.map(entry=>{
+  function addIngredient(raw){
+    const original=String(raw).trim();
+    const match=original.match(/^(\d+(?:[.,]\d+)?)\s*(kg|g|mg|l|ml|EL|TL|stk\\.?|stück|eier|ei|wraps?|tortillas?)\s+(.+)$/i);
+
+    if(!match){
+      const key=original.toLowerCase().replace(/\s+/g,' ');
+      if(!grouped.has(key)) grouped.set(key,{name:original,amount:null,unit:''});
+      return;
+    }
+
+    let amount=parseFloat(match[1].replace(',','.'));
+    let unit=match[2];
+    const name=match[3].trim();
+    const u=unit.toLowerCase();
+
+    if(u==='kg'){amount*=1000;unit='g'}
+    else if(u==='mg'){amount/=1000;unit='g'}
+    else if(u==='l'){amount*=1000;unit='ml'}
+    else if(['stk.','stk','stück'].includes(u))unit='Stück';
+    else if(['ei','eier'].includes(u))unit='Eier';
+    else if(['wrap','wraps'].includes(u))unit='Wraps';
+    else if(['tortilla','tortillas'].includes(u))unit='Tortillas';
+    else if(u==='el')unit='EL';
+    else if(u==='tl')unit='TL';
+
+    const key=name.toLowerCase().replace(/\s+/g,' ')+'|'+unit.toLowerCase();
+    const item=grouped.get(key)||{name,amount:0,unit};
+    item.amount+=amount;
+    grouped.set(key,item);
+  }
+
+  entries.forEach(entry=>{
     const r=RECIPES.find(x=>x.id===entry.id);
-    return `<div class="shopping-recipe-row">
-      <span>${r.e} ${esc(r.name)} <small>${entry.portions} Portion${entry.portions===1?'':'en'}</small></span>
-      <button class="remove-shopping" data-remove-cart="${r.id}" aria-label="${esc(r.name)} entfernen">×</button>
-    </div>`;
-  }).join('');
+    if(r) scaledIngredients(r,entry.portions).forEach(addIngredient);
+  });
+
+  const items=[...grouped.values()];
+  const formatIngredient=item=>item.amount===null
+    ? esc(item.name)
+    : `${formatQty(item.amount)} ${esc(item.unit)} ${esc(item.name)}`;
+
+  const rows=items.map((item,index)=>`
+    <li class="shopping-item">
+      <label>
+        <input type="checkbox" data-shopping-check="${index}">
+        <span>${formatIngredient(item)}</span>
+      </label>
+    </li>`).join('');
 
   shell(`<section class="shopping-page">
     <div class="eyebrow">EINKAUF</div>
     <div class="shopping-head">
       <div>
         <h1>Deine Einkaufsliste</h1>
-        <p class="lead">Alles zusammengefasst – doppelte Zutaten werden addiert.</p>
+        <p class="lead">${items.length} Zutaten · ${entries.length} Gerichte · geschätzt ${money(total)} €</p>
       </div>
       <button class="secondary" id="clearCart">🗑️ Liste leeren</button>
     </div>
 
-    <div class="shopping-card shopping-main-card">
-      <div class="shopping-card-head">
-        <div><div class="badge">GESAMTEINKAUF</div><h2>🛒 Zutaten</h2></div>
-        <strong>${groups.length} Position${groups.length===1?'':'en'}</strong>
-      </div>
-      <ul class="shopping-ingredients">${items}</ul>
+    <div class="shopping-summary">
+      <h2>🛒 Einkauf auf einen Blick</h2>
+      <p>Gleiche Zutaten werden automatisch zusammengezählt.</p>
     </div>
 
-    <div class="shopping-card">
-      <div class="shopping-card-head"><div><div class="badge">DEINE GERICHTE</div><h2>Diese Gerichte sind enthalten</h2></div></div>
-      <div class="shopping-recipe-list">${recipeRows}</div>
+    <div class="shopping-list">
+      <div class="shopping-list-title">
+        <h2>Alles einkaufen</h2>
+        <span>${items.length} Positionen</span>
+      </div>
+      <ul>${rows}</ul>
     </div>
 
     <div class="shopping-total">
@@ -534,17 +637,11 @@ function shopping(){
     </div>
   </section>`);
 
-  app.querySelectorAll('[data-remove-cart]').forEach(btn=>{
-    btn.onclick=()=>{
-      const id=Number(btn.dataset.removeCart);
-      state.cart=cartEntries().filter(x=>Number(x.id)!==id);
-      save();
-      render();
-    };
+  app.querySelectorAll('[data-shopping-check]').forEach(box=>{
+    box.onchange=()=>box.closest('label')?.classList.toggle('checked',box.checked);
   });
 
   app.querySelector('#clearCart').onclick=()=>{
-    if(!state.cart.length)return;
     if(confirm('Möchtest du die komplette Einkaufsliste leeren?')){
       state.cart=[];
       save();
@@ -554,9 +651,48 @@ function shopping(){
 
   app.querySelector('#backPlan').onclick=()=>nav('plan');
 }
+function profile(){
+  const isGuest=authMode==='guest' && !currentUser;
+  const accountTitle=isGuest?'Gast':'Angemeldet';
+  const accountSub=isGuest
+    ? 'Du nutzt KOLDIS ohne Konto. Deine Daten bleiben auf diesem Gerät gespeichert.'
+    : (currentUser?.email||'Dein KOLDIS-Konto');
+  const accountActions=isGuest
+    ? `<button class="primary full" id="loginFromProfile">🔐 Anmelden</button><button class="secondary full" id="signupFromProfile">✨ Konto erstellen</button>`
+    : `<button class="secondary full" id="logout">🚪 Abmelden</button>`;
 
-function profile(){shell(`<section class="profile"><div class="eyebrow">PROFIL</div><h1>Dein KOLDIS-Profil</h1><p class="lead">Deine Einrichtung bleibt gespeichert. Ändere sie jederzeit, wenn sich deine Vorlieben, dein Budget oder dein Alltag ändern.</p><div class="profile-account"><small>KONTO</small><strong>${esc(currentUser?.email||'Angemeldet')}</strong><button class="secondary full" id="logout">🚪 Abmelden</button></div><div class="profile-grid"><div><small>WÖCHENTLICHES BUDGET</small><strong>${money(state.budget)} €</strong></div><div><small>MARKT</small><strong>${state.store||'Nicht gewählt'}</strong></div><div><small>ZIELE</small><strong>${state.goals.join(', ')||'Keine'}</strong></div><div><small>ZUBEREITUNG</small><strong>${state.method}</strong></div><div><small>STANDARDMENGE</small><strong>${state.portionDefault||4} Portionen</strong></div></div><button class="secondary full" id="market">🛒 Markt ändern</button><button class="secondary full" id="prefs">⚙️ Vorlieben & Ziele ändern</button><button class="secondary full" id="budget">💶 Budget ändern</button></section>`);app.querySelector('#market').onclick=()=>market();app.querySelector('#prefs').onclick=()=>prefs();app.querySelector('#budget').onclick=()=>budgetPage();app.querySelector('#logout').onclick=logoutKoldis}
+  shell(`<section class="profile">
+    <div class="eyebrow">PROFIL</div>
+    <h1>Dein KOLDIS-Profil</h1>
+    <p class="lead">Deine Einrichtung bleibt gespeichert. Ändere sie jederzeit, wenn sich deine Vorlieben, dein Budget oder dein Alltag ändern.</p>
+    <div class="profile-account">
+      <small>KONTO</small>
+      <strong>${esc(accountTitle)}</strong>
+      <span class="account-sub">${esc(accountSub)}</span>
+      ${accountActions}
+    </div>
+    <div class="profile-grid">
+      <div><small>WÖCHENTLICHES BUDGET</small><strong>${money(state.budget)} €</strong></div>
+      <div><small>MARKT</small><strong>${state.store||'Nicht gewählt'}</strong></div>
+      <div><small>ZIELE</small><strong>${state.goals.join(', ')||'Keine'}</strong></div>
+      <div><small>ZUBEREITUNG</small><strong>${state.method}</strong></div>
+      <div><small>STANDARDMENGE</small><strong>${state.portionDefault||4} Portionen</strong></div>
+    </div>
+    <button class="secondary full" id="market">🛒 Markt ändern</button>
+    <button class="secondary full" id="prefs">⚙️ Vorlieben & Ziele ändern</button>
+    <button class="secondary full" id="budget">💶 Budget ändern</button>
+  </section>`);
 
+  app.querySelector('#market').onclick=()=>market();
+  app.querySelector('#prefs').onclick=()=>prefs();
+  app.querySelector('#budget').onclick=()=>budgetPage();
+  app.querySelector('#logout')?.addEventListener('click',logoutKoldis);
+  app.querySelector('#loginFromProfile')?.addEventListener('click',()=>showAuth());
+  app.querySelector('#signupFromProfile')?.addEventListener('click',()=>{
+    showAuth();
+    setTimeout(()=>app.querySelector('#showSignup')?.click(),0);
+  });
+}
 function market(){shell(`<section class="panel"><div class="eyebrow">MARKT</div><h1>Wo kaufst du ein?</h1><p class="lead">Wähle deinen bevorzugten Markt. Ein echter Preisvergleich kann später angebunden werden.</p><div class="store-grid">${STORES.map(s=>`<button class="${state.store===s?'selected':''}" data-store="${s}">🛒 ${s}</button>`).join('')}</div><button class="secondary full" id="back">← Profil</button></section>`);app.querySelectorAll('[data-store]').forEach(b=>b.onclick=()=>{state.store=b.dataset.store;save();profile()});app.querySelector('#back').onclick=()=>profile()}
 function prefs(){shell(`<section class="panel"><div class="eyebrow">PERSÖNLICH</div><h1>Was passt zu dir?</h1><p class="lead">Mehrere Ziele und Vorlieben sind möglich. KOLDIS nutzt sie zur Sortierung und zum Ausschluss.</p><h2>Ziele</h2><div class="choice-grid">${['High Protein','Low Calorie','Günstig','Meal Prep','Gesünder essen','Schnell'].map(x=>`<button class="choice ${state.goals.includes(x)?'selected':''}" data-goal="${x}">${x}</button>`).join('')}</div><h2>Mag ich</h2><div class="tag-edit"><input id="likeInput" placeholder="z.B. Hähnchen"><button class="primary" id="addLike">Hinzufügen</button></div><div class="chips">${state.likes.map(x=>`<button data-like="${x}">❤️ ${x} ×</button>`).join('')}</div><h2>Mag ich nicht</h2><div class="tag-edit"><input id="disInput" placeholder="z.B. Pilze"><button class="primary" id="addDis">Hinzufügen</button></div><div class="chips">${state.dislikes.map(x=>`<button data-dis="${x}">❌ ${x} ×</button>`).join('')}</div><h2>Zubereitung</h2><div class="choice-grid">${['Egal','Pfanne','Ofen','Mikrowelle','Airfryer','Topf'].map(x=>`<button class="choice ${state.method===x?'selected':''}" data-method="${x}">${x}</button>`).join('')}</div><button class="secondary full" id="done">Fertig</button></section>`);app.querySelectorAll('[data-goal]').forEach(b=>b.onclick=()=>{const x=b.dataset.goal;state.goals=state.goals.includes(x)?state.goals.filter(y=>y!==x):[...state.goals,x];save();prefs()});app.querySelectorAll('[data-method]').forEach(b=>b.onclick=()=>{state.method=b.dataset.method;save();prefs()});app.querySelector('#addLike').onclick=()=>{const x=app.querySelector('#likeInput').value.trim();if(x&&!state.likes.includes(x))state.likes.push(x);save();prefs()};app.querySelector('#addDis').onclick=()=>{const x=app.querySelector('#disInput').value.trim();if(x&&!state.dislikes.includes(x))state.dislikes.push(x);save();prefs()};app.querySelectorAll('[data-like]').forEach(b=>b.onclick=()=>{state.likes=state.likes.filter(x=>x!==b.dataset.like);save();prefs()});app.querySelectorAll('[data-dis]').forEach(b=>b.onclick=()=>{state.dislikes=state.dislikes.filter(x=>x!==b.dataset.dis);save();prefs()});app.querySelector('#done').onclick=()=>profile()}
 function budgetPage(){shell(`<section class="panel"><div class="eyebrow">BUDGET</div><h1>Was möchtest du pro Woche ausgeben?</h1><div class="budget-big"><span id="bv">${state.budget}</span> €</div><input id="br" type="range" min="25" max="150" step="5" value="${state.budget}"><p class="lead">KOLDIS versucht bei der Wochenplanung innerhalb deines Budgets zu bleiben.</p><button class="primary full" id="done">Speichern</button></section>`);app.querySelector('#br').oninput=e=>app.querySelector('#bv').textContent=e.target.value;app.querySelector('#done').onclick=()=>{state.budget=+app.querySelector('#br').value;save();profile()}}
