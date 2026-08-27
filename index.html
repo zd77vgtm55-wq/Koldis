@@ -1,65 +1,29 @@
--- KOLDIS 0.9.6: Admin + Feedback + Nutzungsstatistik
--- Dieses SQL im Supabase SQL Editor ausführen.
-
-create table if not exists public.koldis_admins (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  created_at timestamptz not null default now()
-);
-
-alter table public.koldis_admins enable row level security;
-drop policy if exists "admins_can_read_self" on public.koldis_admins;
-create policy "admins_can_read_self" on public.koldis_admins
-for select to authenticated using (user_id = auth.uid());
-
-create table if not exists public.koldis_events (
-  id uuid primary key default gen_random_uuid(),
-  event_name text not null,
-  user_id uuid references auth.users(id) on delete set null,
-  session_id text,
-  metadata jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
-);
-
-alter table public.koldis_events enable row level security;
-drop policy if exists "events_insert_public" on public.koldis_events;
-create policy "events_insert_public" on public.koldis_events
-for insert to anon, authenticated
-with check (user_id is null or user_id = auth.uid());
-drop policy if exists "events_admin_read" on public.koldis_events;
-create policy "events_admin_read" on public.koldis_events
-for select to authenticated using (exists(select 1 from public.koldis_admins a where a.user_id = auth.uid()));
-
-create table if not exists public.koldis_feedback (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete set null,
-  rating integer check (rating between 1 and 5),
-  category text not null default 'Sonstiges',
-  message text not null check (char_length(message) between 1 and 3000),
-  status text not null default 'new' check (status in ('new','read','done')),
-  created_at timestamptz not null default now()
-);
-
-alter table public.koldis_feedback enable row level security;
-drop policy if exists "feedback_insert_public" on public.koldis_feedback;
-create policy "feedback_insert_public" on public.koldis_feedback
-for insert to anon, authenticated
-with check (user_id is null or user_id = auth.uid());
-drop policy if exists "feedback_admin_read" on public.koldis_feedback;
-create policy "feedback_admin_read" on public.koldis_feedback
-for select to authenticated using (exists(select 1 from public.koldis_admins a where a.user_id = auth.uid()));
-drop policy if exists "feedback_admin_update" on public.koldis_feedback;
-create policy "feedback_admin_update" on public.koldis_feedback
-for update to authenticated using (exists(select 1 from public.koldis_admins a where a.user_id = auth.uid())) with check (exists(select 1 from public.koldis_admins a where a.user_id = auth.uid()));
-
--- EINMALIG: dein eigenes KOLDIS-Konto als Admin freischalten.
--- Nur direkt im Supabase SQL Editor ausführen und deine eigene E-Mail einsetzen:
--- insert into public.koldis_admins(user_id)
--- select id from auth.users where email = 'DEINE EMAIL'
--- on conflict do nothing;
-
--- Damit das Dashboard die registrierten Profile zählen kann:
-alter table public.profiles enable row level security;
-drop policy if exists "profiles_admin_read" on public.profiles;
-create policy "profiles_admin_read" on public.profiles
-for select to authenticated
-using (exists(select 1 from public.koldis_admins a where a.user_id = auth.uid()));
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07110c">
+  <meta name="description" content="KOLDIS – Dein Essen. Dein Markt. Dein Budget.">
+  <title>KOLDIS – Dein Essen. Dein Markt. Dein Budget.</title>
+  <link rel="stylesheet" href="style.css?v=0.9.7">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const KOLDIS_SUPABASE_URL = "https://fyiuokunfvxqjgyvbxoc.supabase.co";
+    const KOLDIS_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_E-mB0GYItOQ-Z6RWBX4Iyw_UhJULVAl";
+    if (window.supabase && typeof window.supabase.createClient === "function") {
+      window.koldisSupabase = window.supabase.createClient(
+        KOLDIS_SUPABASE_URL,
+        KOLDIS_SUPABASE_PUBLISHABLE_KEY,
+        { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
+      );
+    } else {
+      window.koldisSupabase = null;
+    }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="app.js?v=0.9.7" defer></script>
+</body>
+</html>
